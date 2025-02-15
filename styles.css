@@ -99,9 +99,6 @@ body {
   background-size: auto 100%;
 }
 
-.pixel-pet.facing-left {
-  transform: scaleX(-1);
-}
 
 .pixel-pet.dead {
   background-image: url('animation/raven_death.png');

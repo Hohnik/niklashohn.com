@@ -1,33 +1,42 @@
+const Direction = Object.freeze({
+  LEFT: "left",
+  RIGHT: "right",
+})
+
+const State = Object.freeze({
+  STAYING: { image: "./animation/raven_stay.png", framecount: 1, className: "staying" },
+  WALKING: { image: "./animation/raven_walk.png", framecount: 4, className: "walking" },
+  DEAD: { image: "./animation/raven_death.png", framecount: 11, className: "dead" }
+})
+
 class PixelRaven {
   constructor() {
-    this.raven = document.getElementById("pet");
-    this.button = document.getElementById("trigger");
+    this.ravenElement = document.getElementById("pet");
+    this.deathButton = document.getElementById("trigger");
 
-    this.pixelSize = 2;
+    this.scale = 2;
+    this.movementSpeed = 20
     this.frameWidth = 27;
     this.frameHeight = 27;
-    this.walkFrames = 4;
-    this.deathFrames = 11;
 
-    this.walkImage = "animation/raven_walk.png";
-    this.deathImage = "animation/raven_death.png";
+    this.currentState = State.WALKING
+    this.currentImage = this.walkImage
+    this.currentFrame = 0;
+    this.tick = 0;
+    this.currentLocation = { x: 80, y: 80 };
+    this.targetLocation = { x: window.innerWidth / 2, y: window.innerHeight / 4 };
+    this.direction = Direction.RIGHT
 
     this.setupSprite();
-
-    this.position = { x: 20, y: 20 };
-    this.target = { ...this.position };
-    this.currentFrame = 0;
-    this.isDead = false;
-
     this.setupEventListeners();
-    this.startMovementLoop();
+    this.setupLoop();
   }
 
   setupSprite() {
-    Object.assign(this.raven.style, {
-      width: `${this.frameWidth * this.pixelSize}px`,
-      height: `${this.frameHeight * this.pixelSize}px`,
-      backgroundImage: `url('${this.walkImage}')`,
+    Object.assign(this.ravenElement.style, {
+      width: `${this.frameWidth * this.scale}px`,
+      height: `${this.frameHeight * this.scale}px`,
+      backgroundImage: `url('${this.currentImage}')`,
       backgroundSize: `auto 100%`,
       backgroundRepeat: "no-repeat",
       position: "absolute",
@@ -37,90 +46,100 @@ class PixelRaven {
 
   setupEventListeners() {
     document.addEventListener("mousemove", (e) => {
-      if (!this.isDead) {
-        this.target = { x: e.clientX, y: e.clientY };
-      }
+      if (this.currentState == State.DEAD) return
+      this.targetLocation = { x: e.clientX, y: e.clientY };
     });
 
-    this.button.addEventListener("click", () => this.die());
+    this.deathButton.addEventListener("click", () => this.die());
+  }
+  setupLoop() {
+    this.updateInterval = setInterval(() => this.update(), 1000 / this.movementSpeed)
+    this.tickInterval = setInterval(() => this.tick++, 100)
   }
 
-  startMovementLoop() {
-    this.moveInterval = setInterval(() => {
-      if (!this.isDead) {
-        this.move();
-      }
-    }, 100);
-  }
-
-  move() {
-    const dx = this.target.x - this.position.x;
-    const dy = this.target.y - this.position.y;
+  update() {
+    const dx = this.targetLocation.x - this.currentLocation.x;
+    const dy = this.targetLocation.y - this.currentLocation.y;
     const distance = Math.hypot(dx, dy);
+    if (dx > 0) this.ravenElement.style.transform = "scaleX(-1)"
+    else this.ravenElement.style.transform = "scaleX(1)"
 
-    if (distance > this.pixelSize * 2) {
-      this.handleMovement(dx, dy);
+
+    if (this.currentState == State.DEAD) return
+    if (distance > 20) {
+      this.updateClass(State.STAYING.className);
+      this.currentState = State.WALKING
+      this.walk(dx, dy);
     } else {
-      this.raven.classList.remove("walking");
+      this.updateClass(State.STAYING.className)
+      this.currentState = State.STAYING
+      this.stay()
     }
-
     this.updatePosition();
   }
 
-  handleMovement(dx, dy) {
-    this.raven.classList.toggle("facing-left", dx > 0);
-    this.raven.classList.add("walking");
-    this.raven.style.backgroundImage = `url('${this.walkImage}')`;
+  stay() {
+    this.ravenElement.style.backgroundImage = `url('${State.STAYING.image}')`;
+    this.updateFrame(0)
 
-    if (Math.abs(dx) >= this.pixelSize) {
-      this.position.x += Math.sign(dx) * this.pixelSize;
-    }
-    if (Math.abs(dy) >= this.pixelSize) {
-      this.position.y += Math.sign(dy) * this.pixelSize;
-    }
   }
 
-  updatePosition() {
-    const roundedX = Math.round(this.position.x / this.pixelSize) * this.pixelSize;
-    const roundedY = Math.round(this.position.y / this.pixelSize) * this.pixelSize;
-    const offset = (this.pixelSize * this.frameWidth) / 2;
+  walk(dx, dy) {
+    this.ravenElement.style.backgroundImage = `url('${State.WALKING.image}')`;
 
-    this.raven.style.left = `${roundedX - offset}px`;
-    this.raven.style.top = `${roundedY - offset}px`;
+    const walkArea = 10
+    if (Math.abs(dx) > walkArea) {
+      this.currentLocation.x += Math.sign(dx) * this.scale;
+    }
+    if (Math.abs(dy) > walkArea) {
+      this.currentLocation.y += Math.sign(dy) * this.scale;
+    }
+
+    this.updateFrame(this.tick % (State.WALKING.framecount))
   }
 
   die() {
-    if (this.isDead) return;
+    if (this.currentState == State.DEAD) return;
+    this.currentState = State.DEAD
+    clearInterval(this.updateInterval);
 
-    this.isDead = true;
-    clearInterval(this.moveInterval);
-    this.raven.classList.remove("walking");
-    this.playDeathAnimation();
-  }
-
-  playDeathAnimation() {
-    this.raven.style.backgroundImage = `url('${this.deathImage}')`;
+    this.ravenElement.style.backgroundImage = `url('${State.DEAD.image}')`;
     this.currentFrame = 0;
-
     const animationInterval = setInterval(() => {
       this.updateFrame(this.currentFrame);
       this.currentFrame++;
 
-      if (this.currentFrame >= this.deathFrames) {
+      if (this.currentFrame >= State.DEAD.framecount - 1) {
         clearInterval(animationInterval);
-        this.updateFrame(this.deathFrames - 1);
       }
-    }, 150);
+    }, 100);
+  }
+
+  updatePosition() {
+    const x = Math.round(this.currentLocation.x)
+    const y = Math.round(this.currentLocation.y)
+    const center = (this.scale * this.frameWidth) / 2;
+
+    this.ravenElement.style.left = `${x - center}px`;
+    this.ravenElement.style.top = `${y - center}px`;
   }
 
   updateFrame(frame) {
-    const position = -(frame * this.frameWidth * this.pixelSize);
-    this.raven.style.backgroundPosition = `${position}px 0px`;
+    const position = -(frame * this.frameWidth * this.scale);
+    this.ravenElement.style.backgroundPosition = `${position}px 0px`;
+  }
+
+  updateClass(className) {
+    for (let state in State) {
+      this.ravenElement.classList.remove(State[state].className);
+    }
+    this.ravenElement.classList.add(className);
+
   }
 }
 
 function initializeRaven() {
-  const imageUrls = ["animation/raven_walk.png", "animation/raven_death.png"];
+  const imageUrls = ["animation/raven_stay.png", "animation/raven_walk.png", "animation/raven_death.png"];
   const imagePromises = imageUrls.map((url) => {
     return new Promise((resolve, reject) => {
       const img = new Image();
