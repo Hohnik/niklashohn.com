@@ -1,20 +1,83 @@
 class PixelRaven {
   constructor() {
     this.raven = document.getElementById("pet");
+    this.button = document.getElementById("trigger");
+
     this.pixelSize = 2;
     this.frameWidth = 27;
-    this.frameCount = 4;
-    this.currentFrame = 0;
+    this.frameHeight = 27;
+    this.walkFrames = 4;
+    this.deathFrames = 11;
+
+    this.walkImage = "animation/raven_walk.png";
+    this.deathImage = "animation/raven_death.png";
+
+    this.setupSprite();
+
     this.position = { x: 20, y: 20 };
     this.target = { ...this.position };
+    this.currentFrame = 0;
+    this.isDead = false;
 
-    this.updatePosition();
+    this.setupEventListeners();
+    this.startMovementLoop();
+  }
+
+  setupSprite() {
+    Object.assign(this.raven.style, {
+      width: `${this.frameWidth * this.pixelSize}px`,
+      height: `${this.frameHeight * this.pixelSize}px`,
+      backgroundImage: `url('${this.walkImage}')`,
+      backgroundSize: `auto 100%`,
+      backgroundRepeat: "no-repeat",
+      position: "absolute",
+      imageRendering: "pixelated",
+    });
+  }
+
+  setupEventListeners() {
     document.addEventListener("mousemove", (e) => {
-      this.target = { x: e.clientX, y: e.clientY };
+      if (!this.isDead) {
+        this.target = { x: e.clientX, y: e.clientY };
+      }
     });
 
-    setInterval(() => this.moveTowardTarget(), 100);
-    setInterval(() => this.updateAnimation(), 150);
+    this.button.addEventListener("click", () => this.die());
+  }
+
+  startMovementLoop() {
+    this.moveInterval = setInterval(() => {
+      if (!this.isDead) {
+        this.move();
+      }
+    }, 100);
+  }
+
+  move() {
+    const dx = this.target.x - this.position.x;
+    const dy = this.target.y - this.position.y;
+    const distance = Math.hypot(dx, dy);
+
+    if (distance > this.pixelSize * 2) {
+      this.handleMovement(dx, dy);
+    } else {
+      this.raven.classList.remove("walking");
+    }
+
+    this.updatePosition();
+  }
+
+  handleMovement(dx, dy) {
+    this.raven.classList.toggle("facing-left", dx > 0);
+    this.raven.classList.add("walking");
+    this.raven.style.backgroundImage = `url('${this.walkImage}')`;
+
+    if (Math.abs(dx) >= this.pixelSize) {
+      this.position.x += Math.sign(dx) * this.pixelSize;
+    }
+    if (Math.abs(dy) >= this.pixelSize) {
+      this.position.y += Math.sign(dy) * this.pixelSize;
+    }
   }
 
   updatePosition() {
@@ -26,55 +89,50 @@ class PixelRaven {
     this.raven.style.top = `${roundedY - offset}px`;
   }
 
-  moveTowardTarget() {
-    const dx = this.target.x - this.position.x;
-    const dy = this.target.y - this.position.y;
-    const distance = Math.hypot(dx, dy);
+  die() {
+    if (this.isDead) return;
 
-    if (distance > this.pixelSize * 2) {
-      this.raven.classList.toggle("facing-left", dx > 0);
-      this.raven.classList.add("walking");
-
-      if (Math.abs(dx) >= this.pixelSize) {
-        this.position.x += Math.sign(dx) * this.pixelSize;
-      }
-      if (Math.abs(dy) >= this.pixelSize) {
-        this.position.y += Math.sign(dy) * this.pixelSize;
-      }
-    } else {
-      this.raven.classList.remove("walking");
-    }
-
-    this.updatePosition();
+    this.isDead = true;
+    clearInterval(this.moveInterval);
+    this.raven.classList.remove("walking");
+    this.playDeathAnimation();
   }
 
-  updateAnimation() {
-    if (this.raven.classList.contains("walking")) {
-      this.currentFrame = (this.currentFrame + 1) % this.frameCount;
-      this.raven.style.backgroundPosition = `-${
-        this.currentFrame * this.frameWidth * this.pixelSize
-      }px 0px`;
-    } else {
-      this.currentFrame = 0;
-      this.raven.style.backgroundPosition = "0 0";
-    }
+  playDeathAnimation() {
+    this.raven.style.backgroundImage = `url('${this.deathImage}')`;
+    this.currentFrame = 0;
+
+    const animationInterval = setInterval(() => {
+      this.updateFrame(this.currentFrame);
+      this.currentFrame++;
+
+      if (this.currentFrame >= this.deathFrames) {
+        clearInterval(animationInterval);
+        this.updateFrame(this.deathFrames - 1);
+      }
+    }, 150);
+  }
+
+  updateFrame(frame) {
+    const position = -(frame * this.frameWidth * this.pixelSize);
+    this.raven.style.backgroundPosition = `${position}px 0px`;
   }
 }
 
-window.addEventListener("load", () => {
-  const images = [
-    "animation/raven_stay.png",
-    "animation/raven_walk.png",
-  ].map((src) => {
-    const img = new Image();
-    img.src = src;
+function initializeRaven() {
+  const imageUrls = ["animation/raven_walk.png", "animation/raven_death.png"];
+  const imagePromises = imageUrls.map((url) => {
     return new Promise((resolve, reject) => {
+      const img = new Image();
       img.onload = resolve;
-      img.onerror = () => reject(`Failed to load ${src}`);
+      img.onerror = () => reject(`Failed to load ${url}`);
+      img.src = url;
     });
   });
 
-  Promise.all(images)
+  Promise.all(imagePromises)
     .then(() => new PixelRaven())
     .catch(console.error);
-});
+}
+
+window.addEventListener("load", initializeRaven);

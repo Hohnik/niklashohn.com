@@ -27,7 +27,7 @@
   font-display: swap;
 }
 
-body, body *{
+body, body * {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
@@ -39,18 +39,16 @@ body {
   overflow: hidden;
 }
 
-/* Navbar Styles */
 .navbar {
   position: fixed;
   width: 100%;
   padding: 1rem;
   display: flex;
-  justify-content: flex-end; /* Align button to the right */
+  justify-content: flex-end;
   align-items: center;
   z-index: 3;
 }
 
-/* Button Styles (Shadcn-like) */
 .button {
   padding: 0.5rem 1rem;
   font-family: 'Pixelify', monospace;
@@ -86,23 +84,26 @@ body {
 }
 
 .pixel-pet {
-  position: fixed;
+  position: absolute;
   width: 54px;  /* 27px * 2 scale */
   height: 54px; /* 27px * 2 scale */
-  background-image: url('animation/raven_stay.png');
-  background-size: 100% 100%;
+  background-repeat: no-repeat;
   image-rendering: pixelated;
   pointer-events: none;
   z-index: 2;
+  transform-origin: center;
 }
 
 .pixel-pet.walking {
-  width: 54px;  /* Still 27px * 2 scale */
-  height: 54px; /* Still 27px * 2 scale */
   background-image: url('animation/raven_walk.png');
-  background-size: 216px 54px; /* (108px * 2) x (27px * 2) */
+  background-size: auto 100%;
 }
 
 .pixel-pet.facing-left {
   transform: scaleX(-1);
+}
+
+.pixel-pet.dead {
+  background-image: url('animation/raven_death.png');
+  background-size: auto 100%;
 }
