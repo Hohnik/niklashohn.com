@@ -1,10 +1,11 @@
+const raven = document.getElementById("pet")
 const clock = document.getElementById("timer")
-
-start = Math.floor(Date.now() / 1000)
+const start = Math.floor(Date.now() / 1000)
 
 const timer = setInterval(() => {
-  delta = Math.floor(Date.now() / 1000) - start
+  let delta = Math.floor(Date.now() / 1000) - start
   clock.innerText = formatTime(delta)
+  if (raven.classList.contains("dead")) clearInterval(timer);
 }, 1000);
 
 function formatTime(seconds) {
