@@ -1,11 +1,8 @@
-const Direction = Object.freeze({
-  LEFT: "left",
-  RIGHT: "right",
-})
-
 const State = Object.freeze({
-  STAYING: { image: "./animation/raven_stay.png", framecount: 1, className: "staying" },
-  WALKING: { image: "./animation/raven_walk.png", framecount: 4, className: "walking" },
+  IDLE: { image: "./animation/raven_idle.png", framecount: 5, className: "idle" },
+  STAY: { image: "./animation/raven_stay.png", framecount: 1, className: "staying" },
+  WALK: { image: "./animation/raven_walk.png", framecount: 4, className: "walking" },
+  FLY: { image: "./animation/raven_fly.png", framecount: 6, className: "flying" },
   DEAD: { image: "./animation/raven_death.png", framecount: 11, className: "dead" }
 })
 
@@ -13,19 +10,19 @@ class PixelRaven {
   constructor() {
     this.ravenElement = document.getElementById("pet");
     this.deathButton = document.getElementById("trigger");
+    this.text = document.getElementById("text");
 
     this.scale = 2;
     this.movementSpeed = 20
     this.frameWidth = 27;
     this.frameHeight = 27;
 
-    this.currentState = State.WALKING
+    this.currentState = State.WALK
     this.currentImage = this.walkImage
     this.currentFrame = 0;
     this.tick = 0;
     this.currentLocation = { x: 80, y: 80 };
     this.targetLocation = { x: window.innerWidth / 2, y: window.innerHeight / 4 };
-    this.direction = Direction.RIGHT
 
     this.setupSprite();
     this.setupEventListeners();
@@ -66,53 +63,82 @@ class PixelRaven {
 
 
     if (this.currentState == State.DEAD) return
-    if (distance > 20) {
-      this.updateClass(State.STAYING.className);
-      this.currentState = State.WALKING
+    if (distance > 1000) {
+      this.updateClass(State.FLY.className)
+      this.currentState = State.FLY
+      this.fly(dx, dy)
+    }
+    else if (distance > 20) {
+      this.currentFrame = 0
+      this.updateClass(State.WALK.className);
+      this.currentState = State.WALK
       this.walk(dx, dy);
     } else {
-      this.updateClass(State.STAYING.className)
-      this.currentState = State.STAYING
-      this.stay()
+      this.updateClass(State.IDLE.className)
+      this.currentState = State.IDLE
+      this.idle()
     }
+    this.ravenElement.style.backgroundImage = `url('${this.currentState.image}')`;
     this.updatePosition();
   }
 
-  stay() {
-    this.ravenElement.style.backgroundImage = `url('${State.STAYING.image}')`;
-    this.updateFrame(0)
+  idle() {
+    if (Math.random() < 0.01 && this.currentFrame == 0) this.currentFrame++
+    else if (Math.random() < 0.1 && this.currentFrame == 1) this.currentFrame++
+    else if (Math.random() < 0.001 && this.currentFrame == 2) this.currentFrame++
+    else if (Math.random() < 0.1 && this.currentFrame == 3) this.currentFrame++
+    else if (Math.random() < 0.01 && this.currentFrame == 4) this.currentFrame = this.currentFrame = 0
 
+    this.updateFrame(this.currentFrame)
   }
 
   walk(dx, dy) {
-    this.ravenElement.style.backgroundImage = `url('${State.WALKING.image}')`;
+    this.currentLocation.x += Math.sign(dx) * this.scale;
+    this.currentLocation.y += Math.sign(dy) * this.scale;
+    this.updateFrame(this.tick % this.currentState.framecount)
+  }
 
-    const walkArea = 10
-    if (Math.abs(dx) > walkArea) {
-      this.currentLocation.x += Math.sign(dx) * this.scale;
-    }
-    if (Math.abs(dy) > walkArea) {
-      this.currentLocation.y += Math.sign(dy) * this.scale;
-    }
-
-    this.updateFrame(this.tick % (State.WALKING.framecount))
+  fly(dx, dy) {
+    const flyingSpeed = 3
+    this.currentLocation.x += Math.sign(dx) * this.scale * flyingSpeed;
+    this.currentLocation.y += Math.sign(dy) * this.scale * flyingSpeed;
+    this.updateFrame(this.tick % this.currentState.framecount)
   }
 
   die() {
     if (this.currentState == State.DEAD) return;
+
     this.currentState = State.DEAD
+    this.updateClass(this.currentState.className)
+    this.ravenElement.style.backgroundImage = `url('${this.currentState.image}')`;
     clearInterval(this.updateInterval);
 
-    this.ravenElement.style.backgroundImage = `url('${State.DEAD.image}')`;
-    this.currentFrame = 0;
-    const animationInterval = setInterval(() => {
-      this.updateFrame(this.currentFrame);
-      this.currentFrame++;
 
-      if (this.currentFrame >= State.DEAD.framecount - 1) {
+    let counter1 = 0;
+    const animationInterval = setInterval(() => {
+      this.updateFrame(counter1);
+      counter1++;
+
+      if (counter1 >= State.DEAD.framecount) {
         clearInterval(animationInterval);
       }
     }, 100);
+
+
+    setTimeout(() => {
+      let counter2 = 0
+      this.text.innerText = ""
+      let text = ["Why", " did", " you", " kill", " me", ".", ".", ".", "?"]
+      const textInterval = setInterval(() => {
+        this.text.innerText += text[counter2]
+        counter2++;
+
+        if (counter2 >= text.length) {
+          clearInterval(textInterval);
+        }
+      }, 400);
+
+    }, 2000)
   }
 
   updatePosition() {
@@ -139,7 +165,7 @@ class PixelRaven {
 }
 
 function initializeRaven() {
-  const imageUrls = ["animation/raven_stay.png", "animation/raven_walk.png", "animation/raven_death.png"];
+  const imageUrls = ["animation/raven_stay.png", "animation/raven_walk.png", "animation/raven_death.png", "animation/raven_fly.png", "animation/raven_idle.png"];
   const imagePromises = imageUrls.map((url) => {
     return new Promise((resolve, reject) => {
       const img = new Image();
