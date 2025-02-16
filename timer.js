@@ -8,9 +8,9 @@ const timer = setInterval(() => {
 }, 1000);
 
 function formatTime(seconds) {
-  const hours = Math.floor(mins / 60);
-  const mins = Math.floor(seconds / 60);
   const secs = seconds % 60;
+  const mins = Math.floor((seconds / 60) % 60);
+  const hours = Math.floor(mins / 60);
 
   const formattedHours = hours.toString().padStart(2, '0');
   const formattedMins = mins.toString().padStart(2, '0');

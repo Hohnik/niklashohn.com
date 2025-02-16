@@ -21,7 +21,7 @@ class PixelRaven {
     this.currentImage = this.walkImage
     this.currentFrame = 0;
     this.tick = 0;
-    this.currentLocation = { x: 80, y: 80 };
+    this.currentLocation = { x: window.innerWidth / 2, y: window.innerHeight / 4 };
     this.targetLocation = { x: window.innerWidth / 2, y: window.innerHeight / 4 };
 
     this.setupSprite();
