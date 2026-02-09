@@ -7,7 +7,7 @@
 4. Beautiful Images (landscape in my area, places)
 5. Some [projects](https://100.antfu.me/) for people to explore
 6. Increase size of the duck based on if it stands on something or height of the map in the background
-7. Dithered background like [this](xtcjs.app)
+7. Dithered background like [this](https://xtcjs.app)
 
 ## Projectideas
 
