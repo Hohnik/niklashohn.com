@@ -1,9 +1,8 @@
 const State = Object.freeze({
   IDLE: { image: "./animation/raven_idle.png", framecount: 5, className: "idle" },
-  STAY: { image: "./animation/raven_stay.png", framecount: 1, className: "staying" },
   WALK: { image: "./animation/raven_walk.png", framecount: 4, className: "walking" },
   FLY: { image: "./animation/raven_fly.png", framecount: 6, className: "flying" },
-  DEAD: { image: "./animation/raven_death.png", framecount: 11, className: "dead" }
+  DEAD: { image: "./animation/raven_death.png", framecount: 24, className: "dead" }
 })
 
 class PixelRaven {
@@ -11,6 +10,17 @@ class PixelRaven {
     this.ravenElement = document.getElementById("pet");
     this.deathButton = document.getElementById("trigger");
     this.text = document.getElementById("text");
+
+    // Naming UI.
+    this.nameButton = document.getElementById("nameDuck");
+    this.nameForm = document.getElementById("nameForm");
+    this.nameInput = document.getElementById("nameInput");
+    this.nameWrap = document.getElementById("nameDuckWrap");
+    this.name = null;
+    this.nameLabel = document.createElement("div");
+    this.nameLabel.className = "duck-name";
+    this.nameLabel.style.display = "none";
+    document.body.appendChild(this.nameLabel);
 
     this.scale = 2;
     this.movementSpeed = 20
@@ -26,6 +36,7 @@ class PixelRaven {
 
     this.setupSprite();
     this.setupEventListeners();
+    this.setupNaming();
     this.setupLoop();
   }
 
@@ -49,6 +60,24 @@ class PixelRaven {
 
     this.deathButton.addEventListener("click", () => this.die());
   }
+
+  setupNaming() {
+    this.nameButton.addEventListener("click", () => {
+      this.nameButton.hidden = true;
+      this.nameForm.hidden = false;
+      this.nameInput.focus();
+    });
+    this.nameForm.addEventListener("submit", (e) => {
+      e.preventDefault();
+      const value = this.nameInput.value.trim();
+      if (!value) return;
+      this.name = value;
+      this.nameForm.hidden = true;
+      this.nameLabel.textContent = value;
+      this.nameLabel.style.display = "block";
+    });
+  }
+
   setupLoop() {
     this.updateInterval = setInterval(() => this.update(), 1000 / this.movementSpeed)
     this.tickInterval = setInterval(() => this.tick++, 100)
@@ -107,12 +136,19 @@ class PixelRaven {
 
   die() {
     if (this.currentState == State.DEAD) return;
+    if (this.nameWrap) this.nameWrap.style.display = "none";
+
+    // A named duck is a tragedy: it explodes into a permanent gravestone and
+    // joins the shared graveyard. An unnamed one just plays the death animation.
+    if (this.name) {
+      this.explodeAndBury();
+      return;
+    }
 
     this.currentState = State.DEAD
     this.updateClass(this.currentState.className)
     this.ravenElement.style.backgroundImage = `url('${this.currentState.image}')`;
     clearInterval(this.updateInterval);
-
 
     let counter1 = 0;
     const animationInterval = setInterval(() => {
@@ -122,8 +158,7 @@ class PixelRaven {
       if (counter1 >= State.DEAD.framecount) {
         clearInterval(animationInterval);
       }
-    }, 100);
-
+    }, 70);
 
     setTimeout(() => {
       let counter2 = 0
@@ -141,6 +176,31 @@ class PixelRaven {
     }, 2000)
   }
 
+  explodeAndBury() {
+    this.currentState = State.DEAD;
+    this.updateClass(State.DEAD.className); // stops the timer (timer.js watches .dead)
+    clearInterval(this.updateInterval);
+
+    const x = this.currentLocation.x;
+    const y = this.currentLocation.y;
+    this.ravenElement.style.display = "none";
+    this.nameLabel.style.display = "none";
+
+    spawnExplosion(x, y);
+
+    const depth = window.rainScene ? window.rainScene.depthAt(y) : 0.7;
+    createGravestone(this.name, x, y, depth);
+
+    const died = new Date().toISOString();
+    if (window.GRAVEYARD) window.GRAVEYARD.recordDuck({ name: this.name, died });
+
+    this.text.innerText = `Here lies ${this.name}.`;
+
+    // Every raindrop that now falls raises one of the other fallen ducks, until
+    // the whole graveyard has surfaced out of the fog.
+    startGraveyardReveal(this.name);
+  }
+
   updatePosition() {
     const x = Math.round(this.currentLocation.x)
     const y = Math.round(this.currentLocation.y)
@@ -148,6 +208,11 @@ class PixelRaven {
 
     this.ravenElement.style.left = `${x - center}px`;
     this.ravenElement.style.top = `${y - center}px`;
+
+    if (this.name && this.currentState !== State.DEAD) {
+      this.nameLabel.style.left = `${x}px`;
+      this.nameLabel.style.top = `${y - center - 4}px`;
+    }
   }
 
   updateFrame(frame) {
@@ -162,6 +227,98 @@ class PixelRaven {
     this.ravenElement.classList.add(className);
 
   }
+}
+
+// ---- Explosion + graveyard helpers -----------------------------------------
+
+// Fling a burst of pixel debris out from (x, y).
+function spawnExplosion(x, y) {
+  const count = 24;
+  for (let i = 0; i < count; i++) {
+    const p = document.createElement("div");
+    p.className = "duck-particle";
+    p.style.background = Math.random() < 0.72 ? "#2b2733" : "#6a58a0";
+    document.body.appendChild(p);
+
+    const angle = Math.random() * Math.PI * 2;
+    const speed = 2 + Math.random() * 4.5;
+    let px = x, py = y;
+    let vx = Math.cos(angle) * speed;
+    let vy = Math.sin(angle) * speed - 2.5;
+    const dur = 550 + Math.random() * 350;
+    const start = performance.now();
+
+    const step = (now) => {
+      const k = (now - start) / dur;
+      if (k >= 1) { p.remove(); return; }
+      vy += 0.28;
+      px += vx;
+      py += vy;
+      p.style.left = `${px}px`;
+      p.style.top = `${py}px`;
+      p.style.opacity = `${1 - k}`;
+      requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  }
+}
+
+// Build one tombstone at screen point (x, y). Perspective: nearer (lower on
+// screen) => larger and drawn on top; farther => smaller, sinking into the fog.
+function createGravestone(name, x, y, depth) {
+  const grave = document.createElement("div");
+  grave.className = "gravestone";
+  grave.style.left = `${x}px`;
+  grave.style.top = `${y}px`;
+  grave.style.zIndex = String(Math.round(y));
+
+  const lift = document.createElement("div");
+  lift.className = "lift";
+  lift.style.setProperty("--s", (0.55 + depth * 0.6).toFixed(2));
+
+  const stone = document.createElement("div");
+  stone.className = "stone";
+
+  const rip = document.createElement("span");
+  rip.className = "rip";
+  rip.textContent = "R I P";
+
+  const gname = document.createElement("span");
+  gname.className = "gname";
+  gname.textContent = name;
+
+  stone.append(rip, gname);
+  lift.append(stone);
+  grave.append(lift);
+  document.getElementById("graveyard").appendChild(grave);
+}
+
+let revealState = null;
+
+async function startGraveyardReveal(myName) {
+  const all = window.GRAVEYARD ? await window.GRAVEYARD.fetchDucks() : [];
+
+  // Drop one instance of our own name — we already planted that stone.
+  const mine = all.findIndex((d) => d && d.name === myName);
+  if (mine >= 0) all.splice(mine, 1);
+
+  // Shuffle so the graveyard fills in organically.
+  for (let i = all.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [all[i], all[j]] = [all[j], all[i]];
+  }
+
+  revealState = { queue: all.slice(0, 80), last: 0 };
+  if (!window.rainScene) return;
+
+  window.rainScene.onLanding((p) => {
+    if (!revealState || revealState.queue.length === 0) return;
+    const now = performance.now();
+    if (now - revealState.last < 260) return; // one gravestone per few raindrops
+    revealState.last = now;
+    const duck = revealState.queue.shift();
+    createGravestone(duck.name || "Unknown", p.x, p.y, p.depth);
+  });
 }
 
 function initializeRaven() {
