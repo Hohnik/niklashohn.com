@@ -222,6 +222,9 @@ body {
   pointer-events: none;
 }
 .gravestone .lift {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   transform-origin: bottom center;
   animation: grave-rise 0.7s ease-out both;
 }
@@ -235,46 +238,29 @@ body {
     transform: translate(-50%, -100%) scale(var(--s, 1));
   }
 }
+/* True pixel-art headstone sprite (animation/gravestones.png, 4 variants of
+   32x34, shown at 2x). Variant chosen via --i. */
 .gravestone .stone {
-  position: relative;
-  min-width: 44px;
-  max-width: 130px;
-  padding: 6px 9px 9px;
-  font-family: 'Pixelify';
-  color: #2d2b30;
-  text-align: center;
-  background: linear-gradient(#c3bdd2, #918ca6);
-  border: 2px solid #3a3550;
-  border-radius: 22px 22px 3px 3px;
-  box-shadow: inset -3px -3px 0 rgba(0, 0, 0, 0.16),
-    inset 3px 3px 0 rgba(255, 255, 255, 0.22), 0 3px 0 #2f2b40;
+  width: 64px;
+  height: 68px;
+  background-image: url('animation/gravestones.png');
+  background-repeat: no-repeat;
+  background-size: auto 100%;
+  background-position: calc(var(--i, 0) * -64px) 0;
   image-rendering: pixelated;
 }
-/* little dirt mound the stone sits in */
-.gravestone .stone::after {
-  content: '';
-  position: absolute;
-  left: 50%;
-  bottom: -7px;
-  width: 130%;
-  height: 9px;
-  transform: translateX(-50%);
-  background: #6f5a3f;
-  border-radius: 50%;
-  box-shadow: 0 2px 0 #59462f;
-  z-index: -1;
-}
-.gravestone .rip {
-  display: block;
-  font-weight: bold;
-  font-size: 0.62rem;
-  letter-spacing: 1px;
-  opacity: 0.65;
-}
 .gravestone .gname {
-  display: block;
+  margin-top: -8px;
+  font-family: 'Pixelify';
   font-weight: 600;
-  font-size: 0.82rem;
-  line-height: 1.05;
-  word-break: break-word;
+  font-size: 0.8rem;
+  line-height: 1;
+  text-align: center;
+  color: #f2eefb;
+  text-shadow: -1px -1px 0 #2d2b3a, 1px -1px 0 #2d2b3a, -1px 1px 0 #2d2b3a,
+    1px 1px 0 #2d2b3a, 0 2px 0 #2d2b3a;
+  white-space: nowrap;
+  max-width: 130px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }

@@ -278,17 +278,13 @@ function createGravestone(name, x, y, depth) {
 
   const stone = document.createElement("div");
   stone.className = "stone";
-
-  const rip = document.createElement("span");
-  rip.className = "rip";
-  rip.textContent = "R I P";
+  stone.style.setProperty("--i", String(Math.floor(Math.random() * 4)));
 
   const gname = document.createElement("span");
   gname.className = "gname";
   gname.textContent = name;
 
-  stone.append(rip, gname);
-  lift.append(stone);
+  lift.append(stone, gname);
   grave.append(lift);
   document.getElementById("graveyard").appendChild(grave);
 }
@@ -317,7 +313,9 @@ async function startGraveyardReveal(myName) {
     if (now - revealState.last < 260) return; // one gravestone per few raindrops
     revealState.last = now;
     const duck = revealState.queue.shift();
-    createGravestone(duck.name || "Unknown", p.x, p.y, p.depth);
+    // Keep stones fully on-screen (room for the name label below).
+    const y = Math.min(window.innerHeight * 0.88, Math.max(window.innerHeight * 0.16, p.y));
+    createGravestone(duck.name || "Unknown", p.x, y, window.rainScene.depthAt(y));
   });
 }
 
