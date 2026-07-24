@@ -231,6 +231,11 @@ class PixelRaven {
 
 // ---- Explosion + graveyard helpers -----------------------------------------
 
+// Gravestone sprite sheet (7 variants of GS_W x GS_H), drawn at GS_DISP scale.
+const GS_W = 40, GS_H = 48, GS_VARIANTS = 7, GS_DISP = 1.6;
+const graveSprite = new Image();
+graveSprite.src = "animation/gravestones.png";
+
 // Fling a burst of pixel debris out from (x, y).
 function spawnExplosion(x, y) {
   const count = 24;
@@ -276,15 +281,27 @@ function createGravestone(name, x, y, depth) {
   lift.className = "lift";
   lift.style.setProperty("--s", (0.55 + depth * 0.6).toFixed(2));
 
-  const stone = document.createElement("div");
+  // Render the chosen stone sprite + engraved name onto a pixel canvas.
+  const stone = document.createElement("canvas");
   stone.className = "stone";
-  stone.style.setProperty("--i", String(Math.floor(Math.random() * 4)));
+  stone.width = GS_W;
+  stone.height = GS_H;
+  stone.style.width = `${GS_W * GS_DISP}px`;
+  stone.style.height = `${GS_H * GS_DISP}px`;
+  const ctx = stone.getContext("2d");
+  ctx.imageSmoothingEnabled = false;
+  const variant = Math.floor(Math.random() * GS_VARIANTS);
 
-  const gname = document.createElement("span");
-  gname.className = "gname";
-  gname.textContent = name;
+  const paint = () => {
+    ctx.clearRect(0, 0, GS_W, GS_H);
+    ctx.drawImage(graveSprite, variant * GS_W, 0, GS_W, GS_H, 0, 0, GS_W, GS_H);
+    // Engrave the name on the lower face.
+    PixelFont.drawBox(ctx, name, 6, 23, 28, 17, "#3a3850");
+  };
+  if (graveSprite.complete && graveSprite.naturalWidth) paint();
+  else graveSprite.addEventListener("load", paint, { once: true });
 
-  lift.append(stone, gname);
+  lift.append(stone);
   grave.append(lift);
   document.getElementById("graveyard").appendChild(grave);
 }

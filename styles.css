@@ -240,29 +240,9 @@ body {
     transform: translate(-50%, -100%) scale(var(--s, 1));
   }
 }
-/* True pixel-art headstone sprite (animation/gravestones.png, 4 variants of
-   32x34, shown at 2x). Variant chosen via --i. */
+/* Pixel-art headstone: a canvas painted with the chosen sprite variant plus the
+   engraved name (see createGravestone in raven.js). */
 .gravestone .stone {
-  width: 64px;
-  height: 68px;
-  background-image: url('animation/gravestones.png');
-  background-repeat: no-repeat;
-  background-size: auto 100%;
-  background-position: calc(var(--i, 0) * -64px) 0;
+  display: block;
   image-rendering: pixelated;
-}
-.gravestone .gname {
-  margin-top: -8px;
-  font-family: 'Pixelify';
-  font-weight: 600;
-  font-size: 0.8rem;
-  line-height: 1;
-  text-align: center;
-  color: #f2eefb;
-  text-shadow: -1px -1px 0 #2d2b3a, 1px -1px 0 #2d2b3a, -1px 1px 0 #2d2b3a,
-    1px 1px 0 #2d2b3a, 0 2px 0 #2d2b3a;
-  white-space: nowrap;
-  max-width: 130px;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }

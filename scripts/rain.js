@@ -1,16 +1,16 @@
-// Isometric pixel rain over a hand-drawn grass meadow with water puddles.
+// Isometric pixel rain over a hand-drawn grass meadow with muddy puddles.
 //
 // The page is a grass field seen at a shallow angle: the BOTTOM is "near", the
-// TOP is "far" and hazes into the horizon. The ground is noise-shaded pixel-art
-// grass with fleck texture, tufts of accent blades that sway in the wind, and
-// little flowers. Soft cloud shadows drift across it. Scattered water puddles
-// have irregular, hand-drawn outlines (no perfect ellipses) and ripple where
-// the rain hits them.
+// TOP is "far" and hazes into the horizon. Light comes from the TOP-LEFT, so
+// everything is shaded with three analogous tones (warm highlight -> base ->
+// cool shadow) and grass blades cast short shadows to the lower-right. The
+// ground is noise-shaded turf with dry yellow-green patches; over it stand
+// swaying grass blades and little flowers. Scattered puddles are muddy and wet,
+// their water ringed by damp mud that blends into the grass, and they ripple
+// where the rain hits.
 //
-// Static art (grass, texture, puddles) is baked once per resize into an
-// offscreen buffer; only rain, ripples, swaying blades and the drifting clouds
-// are redrawn each frame, then the whole thing is blitted up nearest-neighbour
-// for chunky pixels. Other scripts subscribe via rainScene.onLanding(cb).
+// Static art (turf + puddles) is baked once per resize; blades, flowers, rain
+// and ripples are redrawn each frame, then blitted up nearest-neighbour.
 
 class RainScene {
   constructor() {
@@ -20,25 +20,35 @@ class RainScene {
     this.PIXEL = 4;
     this.buf = document.createElement("canvas");
     this.bctx = this.buf.getContext("2d");
-    this.grass = document.createElement("canvas"); // baked ground
+    this.grass = document.createElement("canvas");
     this.gctx = this.grass.getContext("2d");
-    this.cloudTex = document.createElement("canvas"); // drifting cloud shadows
-    this.cctx = this.cloudTex.getContext("2d");
 
     this.drops = [];
     this.ripples = [];
     this.splashes = [];
     this.puddles = [];
-    this.tufts = [];
+    this.blades = [];
     this.flowers = [];
     this.landingCbs = [];
     this.lastTime = performance.now();
 
+    // Turf palette (dark -> light) with a dry, yellow-green tint for variation.
     this.greens = [
-      [52, 99, 50], [70, 128, 60], [90, 158, 72], [112, 188, 86], [140, 214, 102],
+      [58, 104, 56], [80, 140, 64], [104, 168, 74], [132, 192, 86], [156, 202, 92],
     ];
-    this.hazeTint = [202, 227, 174];
-    this.water = { rim: [46, 88, 112], deep: [66, 132, 172], mid: [86, 160, 198], hi: [156, 210, 230], spark: [212, 240, 248] };
+    this.dryTint = [172, 184, 88];
+    this.hazeTint = [206, 226, 168];
+    // Grass-blade 3-tone (analogous: blue-green shadow -> green -> yellow-green light).
+    this.gSh = [48, 100, 62];
+    this.gBase = [92, 156, 70];
+    this.gHi = [158, 204, 96];
+    // Puddle water 3-tone + mud.
+    this.wHi = [150, 186, 176];
+    this.wBase = [74, 122, 122];
+    this.wSh = [40, 78, 86];
+    this.mud = [96, 84, 54];
+    this.mudDark = [70, 60, 40];
+    this.dampGrass = [56, 96, 54];
     this.petals = ["#f2f2f5", "#f4b8d0", "#ef6d8a", "#e8d24a", "#c79be6"];
 
     this.resize();
@@ -61,10 +71,9 @@ class RainScene {
     this.bctx.imageSmoothingEnabled = false;
 
     this.placePuddles();
-    this.placeTufts();
+    this.placeBlades();
     this.placeFlowers();
     this.bakeGround();
-    this.bakeClouds();
 
     this.drops = [];
     const target = Math.round(this.bw / 7);
@@ -74,57 +83,66 @@ class RainScene {
   depthAtBuf(by) { return Math.min(1, Math.max(0, by / this.bh)); }
   depthAt(screenY) { return Math.min(1, Math.max(0, screenY / this.H)); }
   lerpC(a, b, t) { return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t]; }
+  rgb(c) { return `rgb(${c[0] | 0},${c[1] | 0},${c[2] | 0})`; }
 
   // ---- placement -----------------------------------------------------------
 
   placePuddles() {
     this.puddles = [];
-    const n = Math.max(5, Math.round(this.bw / 42));
+    const n = Math.max(4, Math.round(this.bw / 55));
     for (let i = 0; i < n; i++) {
-      const by = this.bh * (0.34 + Math.random() * 0.62);
+      const by = this.bh * (0.36 + Math.random() * 0.6);
       const depth = this.depthAtBuf(by);
-      const rx = 7 + depth * 17;
+      const rx = 7 + depth * 15;
       const p = {
         x: Math.random() * this.bw,
         y: by,
         rx,
-        ry: rx * (0.34 + depth * 0.24),
-        flat: 0.34 + depth * 0.24,
+        ry: rx * (0.34 + depth * 0.22),
+        flat: 0.34 + depth * 0.22,
+        tint: Math.random(),      // 0 = clear-ish, 1 = muddy brown
         radii: [],
       };
-      // Wobbly hand-drawn outline: a smooth noise ring, 0.68..1.0 of the radius.
-      const S = 20;
+      const S = 22;
       const seed = Math.random() * 100;
       for (let k = 0; k < S; k++) {
         const ang = (k / S) * Math.PI * 2;
-        const nz = this.vnoise(Math.cos(ang) * 1.6 + seed, Math.sin(ang) * 1.6 + seed);
-        p.radii.push(0.7 + nz * 0.3);
+        const nz = this.vnoise(Math.cos(ang) * 1.7 + seed, Math.sin(ang) * 1.7 + seed);
+        p.radii.push(0.72 + nz * 0.28);
       }
       this.puddles.push(p);
     }
   }
 
-  placeTufts() {
-    this.tufts = [];
-    const n = Math.round((this.bw * this.bh) / 480);
-    for (let i = 0; i < n; i++) {
-      const by = this.bh * (0.16 + Math.random() * 0.82);
-      this.tufts.push({
-        x: Math.floor(Math.random() * this.bw),
+  placeBlades() {
+    this.blades = [];
+    // Denser toward the foreground; blade count scales with area.
+    const n = Math.round((this.bw * this.bh) / 150);
+    let guard = 0;
+    while (this.blades.length < n && guard++ < n * 3) {
+      // Bias downward (nearer) so the foreground is grassier.
+      const by = this.bh * (0.2 + Math.pow(Math.random(), 0.7) * 0.79);
+      const bx = Math.floor(Math.random() * this.bw);
+      if (this.puddleAt(bx, by)) continue; // keep blades out of the pools
+      const depth = this.depthAtBuf(by);
+      this.blades.push({
+        x: bx,
         y: by,
-        h: 2 + Math.floor(this.depthAtBuf(by) * 3),
-        shade: Math.random() < 0.5 ? 0 : 4, // darker or brighter than the ground
+        h: 2 + Math.round(depth * 7),
+        lean: (Math.random() * 2 - 1) * (1 + depth),
+        flex: 0.8 + depth * 1.6,
         phase: Math.random() * Math.PI * 2,
-        bend: Math.random() < 0.5 ? 1 : -1,
+        shade: Math.random(),
       });
     }
+    this.blades.sort((a, b) => a.y - b.y); // far blades first
   }
 
   placeFlowers() {
     this.flowers = [];
     const n = Math.round((this.bw * this.bh) / 2600);
     for (let i = 0; i < n; i++) {
-      const by = this.bh * (0.3 + Math.random() * 0.66);
+      const by = this.bh * (0.32 + Math.random() * 0.64);
       this.flowers.push({
         x: Math.floor(Math.random() * this.bw),
         y: by,
@@ -145,10 +163,13 @@ class RainScene {
         const n = this.fbm(x * 0.045, y * 0.085);
         let idx = Math.min(this.greens.length - 1, Math.floor(n * this.greens.length));
         let c = this.greens[idx].slice();
+        // dry yellow-green patches
+        const dry = this.fbm(x * 0.02 + 40, y * 0.03 + 40);
+        if (dry > 0.62) c = this.lerpC(c, this.dryTint, Math.min(0.7, (dry - 0.62) * 2.2));
         // fine fleck texture
         const fleck = this.vnoise(x * 0.7 + 11, y * 0.7 + 7);
-        if (fleck > 0.82) c = this.lerpC(c, this.greens[Math.min(4, idx + 1)], 0.6);
-        else if (fleck < 0.16) c = this.lerpC(c, this.greens[Math.max(0, idx - 1)], 0.6);
+        if (fleck > 0.83) c = this.lerpC(c, this.greens[Math.min(4, idx + 1)], 0.5);
+        else if (fleck < 0.15) c = this.lerpC(c, this.greens[Math.max(0, idx - 1)], 0.5);
         // horizon haze
         const haze = Math.max(0, 1 - this.depthAtBuf(y) / 0.34);
         if (haze > 0) c = this.lerpC(c, this.hazeTint, haze * 0.82);
@@ -162,58 +183,47 @@ class RainScene {
 
   radiusAt(p, ang) {
     const S = p.radii.length;
-    const t = ((ang % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2) / (Math.PI * 2) * S;
-    const i = Math.floor(t);
-    const f = t - i;
+    const t = ((((ang % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2)) / (Math.PI * 2)) * S;
+    const i = Math.floor(t), f = t - i;
     return p.radii[i % S] * (1 - f) + p.radii[(i + 1) % S] * f;
   }
 
   drawPuddle(g, p) {
-    const set = (x, y, c) => { g.fillStyle = `rgb(${c[0]|0},${c[1]|0},${c[2]|0})`; g.fillRect(x, y, 1, 1); };
-    const x0 = Math.floor(p.x - p.rx - 2), x1 = Math.ceil(p.x + p.rx + 2);
-    const y0 = Math.floor(p.y - p.ry - 2), y1 = Math.ceil(p.y + p.ry + 2);
+    const set = (x, y, c) => { g.fillStyle = this.rgb(c); g.fillRect(x, y, 1, 1); };
+    // Per-puddle murky water tones (muddier ones tinted toward the mud colour).
+    const wBase = this.lerpC(this.wBase, this.mud, p.tint * 0.55);
+    const wSh = this.lerpC(this.wSh, this.mudDark, p.tint * 0.55);
+    const wHi = this.lerpC(this.wHi, this.mud, p.tint * 0.3);
+
+    const x0 = Math.floor(p.x - p.rx * 1.25 - 1), x1 = Math.ceil(p.x + p.rx * 1.25 + 1);
+    const y0 = Math.floor(p.y - p.ry * 1.25 - 1), y1 = Math.ceil(p.y + p.ry * 1.25 + 1);
     for (let y = y0; y <= y1; y++) {
       for (let x = x0; x <= x1; x++) {
         const dx = (x - p.x) / p.rx;
         const dy = (y - p.y) / p.ry;
         const dist = Math.hypot(dx, dy);
         const R = this.radiusAt(p, Math.atan2(dy, dx));
-        if (dist > R) continue;
+        const d = dist / R; // 0 centre .. 1 waterline
+        if (d > 1.22) continue;
         let c;
-        if (dist > R - 0.14) c = this.water.rim;                         // wobbly rim
-        else if (dy < -0.12 && dist > 0.3 && dist < 0.72) c = this.water.hi; // top highlight crescent
-        else {
-          const shimmer = this.vnoise(x * 0.35, y * 0.35);
-          c = shimmer > 0.6 ? this.water.mid : this.water.deep;         // dithered water body
+        const jit = this.vnoise(x * 0.5 + 3, y * 0.5 + 9);
+        if (d > 1.0) {
+          // damp grass / mud fading into the turf (blend, no harsh edge)
+          if (jit < 0.4 + (1.18 - d) * 2) c = this.lerpC(this.dampGrass, this.mudDark, 0.4);
+          else continue;
+        } else if (d > 0.82) {
+          c = jit > 0.5 ? this.mud : this.mudDark;           // muddy shoreline
+        } else {
+          // water body, 3-tone by light from the top-left
+          if (dy < -0.12 && dx < 0.12 && d > 0.28 && d < 0.7) c = wHi; // highlight crescent
+          else if (dy > 0.16 && dx > 0.0) c = wSh;                     // deep shadow lower-right
+          else c = jit > 0.55 ? this.lerpC(wBase, wHi, 0.25) : wBase;  // dithered body
         }
         set(x, y, c);
       }
     }
-    // sparkles
-    g.fillStyle = `rgb(${this.water.spark.join(",")})`;
-    g.fillRect(Math.round(p.x - p.rx * 0.3), Math.round(p.y - p.ry * 0.4), 1, 1);
-    g.fillRect(Math.round(p.x - p.rx * 0.1), Math.round(p.y - p.ry * 0.5), 1, 1);
-  }
-
-  bakeClouds() {
-    this.cloudTex.width = this.bw;
-    this.cloudTex.height = this.bh;
-    const c = this.cctx;
-    c.clearRect(0, 0, this.bw, this.bh);
-    // A few big soft dark blobs, kept off the edges so the horizontal wrap is seamless enough.
-    const blobs = Math.max(3, Math.round(this.bw / 90));
-    for (let i = 0; i < blobs; i++) {
-      const cx = this.bw * (0.15 + Math.random() * 0.7);
-      const cy = this.bh * Math.random();
-      const r = this.bh * (0.25 + Math.random() * 0.35);
-      const grad = c.createRadialGradient(cx, cy, 0, cx, cy, r);
-      grad.addColorStop(0, "rgba(20,40,25,0.30)");
-      grad.addColorStop(1, "rgba(20,40,25,0)");
-      c.fillStyle = grad;
-      c.beginPath();
-      c.ellipse(cx, cy, r, r * 0.7, 0, 0, Math.PI * 2);
-      c.fill();
-    }
+    // a bright sparkle on the lit side
+    set(Math.round(p.x - p.rx * 0.32), Math.round(p.y - p.ry * 0.42), [212, 236, 240]);
   }
 
   // ---- rain / ripples ------------------------------------------------------
@@ -233,8 +243,7 @@ class RainScene {
     for (const p of this.puddles) {
       const dx = (bx - p.x) / p.rx;
       const dy = (by - p.y) / p.ry;
-      const dist = Math.hypot(dx, dy);
-      if (dist <= this.radiusAt(p, Math.atan2(dy, dx))) return p;
+      if (Math.hypot(dx, dy) <= this.radiusAt(p, Math.atan2(dy, dx))) return p;
     }
     return null;
   }
@@ -297,43 +306,49 @@ class RainScene {
     b.clearRect(0, 0, this.bw, this.bh);
     b.drawImage(this.grass, 0, 0);
 
-    // Drifting cloud shadows (seamless horizontal wrap).
-    const drift = Math.floor((this.time * 6) % this.bw);
-    b.drawImage(this.cloudTex, -drift, 0);
-    b.drawImage(this.cloudTex, this.bw - drift, 0);
-
-    // Swaying accent grass blades (curved).
-    for (const t of this.tufts) {
-      const sway = Math.sin(this.time * 1.6 + t.phase);
-      const col = this.greens[t.shade];
-      b.fillStyle = `rgb(${col[0]},${col[1]},${col[2]})`;
-      for (let i = 0; i < t.h; i++) {
-        const bendAmt = Math.round((i / t.h) * t.bend + sway * (i / t.h));
-        b.fillRect(t.x + bendAmt, t.y - i, 1, 1);
+    // Grass-blade shadows (cast to the lower-right, light from top-left).
+    b.fillStyle = "rgba(34,64,42,0.22)";
+    for (const bl of this.blades) {
+      const shl = Math.max(1, Math.round(bl.h * 0.3));
+      for (let k = 1; k <= shl; k++) b.fillRect(bl.x + k, bl.y, 1, 1);
+    }
+    // Grass blades, 3-tone, swaying.
+    for (const bl of this.blades) {
+      const sway = Math.sin(this.time * 1.4 + bl.phase) * bl.flex;
+      for (let i = 0; i < bl.h; i++) {
+        const f = i / bl.h;
+        const off = Math.round((bl.lean + sway) * f);
+        let col;
+        if (i >= bl.h - 2) col = this.gHi;
+        else if (i <= 1) col = this.gSh;
+        else col = bl.shade > 0.7 ? this.gHi : this.gBase;
+        b.fillStyle = this.rgb(col);
+        b.fillRect(bl.x + off, bl.y - i, 1, 1);
       }
     }
 
-    // Little flowers, gently nodding.
-    for (const f of this.flowers) {
-      const sway = Math.round(Math.sin(this.time * 1.6 + f.phase));
-      const cx = f.x + sway, cy = f.y - 2;
-      b.fillStyle = f.color;
+    // Flowers, gently nodding.
+    for (const fl of this.flowers) {
+      const sway = Math.round(Math.sin(this.time * 1.4 + fl.phase));
+      const cx = fl.x + sway, cy = fl.y - 3;
+      b.fillStyle = "rgb(70,128,60)";
+      b.fillRect(fl.x, fl.y - 1, 1, 1);
+      b.fillRect(fl.x, fl.y - 2, 1, 1);
+      b.fillStyle = fl.color;
       b.fillRect(cx, cy - 1, 1, 1);
       b.fillRect(cx - 1, cy, 1, 1);
       b.fillRect(cx + 1, cy, 1, 1);
       b.fillRect(cx, cy + 1, 1, 1);
       b.fillStyle = "#f2d24c";
       b.fillRect(cx, cy, 1, 1);
-      b.fillStyle = "rgb(70,128,60)";
-      b.fillRect(f.x, f.y - 1, 1, 1); // stem
     }
 
     // Puddle ripples.
     for (const rp of this.ripples) {
       const prog = rp.t / rp.dur;
-      const alpha = (1 - prog) * 0.6;
+      const alpha = (1 - prog) * 0.5;
       const rx = rp.maxR * prog + 0.5;
-      b.strokeStyle = `rgba(${this.water.spark[0]},${this.water.spark[1]},${this.water.spark[2]},${alpha})`;
+      b.strokeStyle = `rgba(198,224,228,${alpha})`;
       b.lineWidth = 1;
       b.beginPath();
       b.ellipse(rp.x + 0.5, rp.y + 0.5, rx, rx * rp.flat, 0, 0, Math.PI * 2);
@@ -342,7 +357,7 @@ class RainScene {
 
     // Grass splashes.
     for (const s of this.splashes) {
-      b.fillStyle = "rgba(214,236,208,0.5)";
+      b.fillStyle = "rgba(206,232,200,0.5)";
       b.fillRect(s.x, s.y - 1, 1, 1);
       b.fillRect(s.x - 1, s.y, 1, 1);
       b.fillRect(s.x + 1, s.y, 1, 1);
@@ -352,9 +367,9 @@ class RainScene {
     for (const d of this.drops) {
       if (d.y < 0) continue;
       const depth = this.depthAtBuf(d.y);
-      const a = 0.22 + depth * 0.4;
+      const a = 0.2 + depth * 0.38;
       const len = Math.max(1, Math.round(d.len * (0.5 + depth * 0.7)));
-      b.fillStyle = `rgba(226,240,246,${a})`;
+      b.fillStyle = `rgba(224,238,244,${a})`;
       b.fillRect(d.x, Math.floor(d.y) - len, 1, len);
     }
 
