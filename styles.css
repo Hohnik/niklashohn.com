@@ -187,6 +187,9 @@ body {
   gap: 0.4rem;
   align-items: center;
 }
+.name-form[hidden] {
+  display: none; /* explicit display above would otherwise defeat [hidden] */
+}
 
 .name-input {
   font-family: 'Pixelify';
