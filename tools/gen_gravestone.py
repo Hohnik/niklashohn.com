@@ -33,6 +33,8 @@ SPARK = (240, 240, 250, 255)
 GRASS = (108, 192, 78, 255)
 GRASS_D = (79, 158, 58, 255)
 DIRT = (122, 90, 60, 255)
+MOSS = (96, 150, 66, 255)
+MOSS_D = (72, 118, 52, 255)
 CLEAR = (0, 0, 0, 0)
 
 # 3x5 mini font for the engraving.
@@ -128,6 +130,19 @@ def engrave_heart(px, cx, cy):
                 px[cx - 3 + gx, cy + gy] = ENGRAVE
 
 
+def draw_moss(px, inside, seed):
+    # Weathered moss creeping up the lower-left of the stone, deterministic per seed.
+    import random as _r
+    rng = _r.Random(seed)
+    for (x, y) in inside:
+        if y < 20:
+            continue
+        edge_left = (x - 8) + (29 - y)  # closeness to bottom-left corner
+        p = max(0.0, 0.55 - edge_left * 0.06)
+        if rng.random() < p:
+            px[x, y] = MOSS if rng.random() < 0.6 else MOSS_D
+
+
 def draw_grass(px):
     # ground line of grass tufts across the base, with a few tall blades.
     for x in range(2, 30):
@@ -160,6 +175,8 @@ def make_variant(v):
             if (x, y) in inside:
                 px[x, y] = STONE_SH2
         engrave_text(px, "RIP", 16, 17)
+    if v in (1, 3):
+        draw_moss(px, inside, seed=v * 7 + 3)
     draw_grass(px)
     return img
 
