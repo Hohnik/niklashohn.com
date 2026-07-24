@@ -315,12 +315,13 @@ class RainScene {
     // Grass blades, 3-tone, swaying.
     for (const bl of this.blades) {
       const sway = Math.sin(this.time * 1.4 + bl.phase) * bl.flex;
+      // The blade itself is lit (its shadow is cast on the ground, above);
+      // tips catch the most light, so keep the body base + a highlighted tip.
       for (let i = 0; i < bl.h; i++) {
         const f = i / bl.h;
         const off = Math.round((bl.lean + sway) * f);
         let col;
         if (i >= bl.h - 2) col = this.gHi;
-        else if (i <= 1) col = this.gSh;
         else col = bl.shade > 0.7 ? this.gHi : this.gBase;
         b.fillStyle = this.rgb(col);
         b.fillRect(bl.x + off, bl.y - i, 1, 1);

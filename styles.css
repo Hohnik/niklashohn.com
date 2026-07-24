@@ -158,6 +158,17 @@ body {
   background-size: auto 100%;
 }
 
+/* Ground shadow cast by the duck. */
+.duck-shadow {
+  position: absolute;
+  width: 40px;
+  height: 14px;
+  z-index: 1;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+  background: radial-gradient(ellipse at center, rgba(22, 38, 24, 0.38), rgba(22, 38, 24, 0));
+}
+
 /* Floating name label above a named duck. */
 .duck-name {
   position: absolute;

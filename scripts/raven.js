@@ -22,6 +22,11 @@ class PixelRaven {
     this.nameLabel.style.display = "none";
     document.body.appendChild(this.nameLabel);
 
+    // Soft shadow the duck casts on the ground (light from the top-left).
+    this.shadow = document.createElement("div");
+    this.shadow.className = "duck-shadow";
+    document.body.appendChild(this.shadow);
+
     this.scale = 2;
     this.movementSpeed = 20
     this.frameWidth = 27;
@@ -185,6 +190,7 @@ class PixelRaven {
     const y = this.currentLocation.y;
     this.ravenElement.style.display = "none";
     this.nameLabel.style.display = "none";
+    this.shadow.style.display = "none";
 
     spawnExplosion(x, y);
 
@@ -208,6 +214,9 @@ class PixelRaven {
 
     this.ravenElement.style.left = `${x - center}px`;
     this.ravenElement.style.top = `${y - center}px`;
+
+    this.shadow.style.left = `${x + 3}px`;
+    this.shadow.style.top = `${y + center * 0.5}px`;
 
     if (this.name && this.currentState !== State.DEAD) {
       this.nameLabel.style.left = `${x}px`;

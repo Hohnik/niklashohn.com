@@ -63,6 +63,17 @@ def rounded(flat_top=False, arched=False):
     return rows
 
 
+def cast_shadow(px):
+    # The stone casts a shadow on the ground to the lower-right (light top-left).
+    cx, cy, rx, ry = 24, 44, 15, 4
+    for y in range(cy - ry, cy + ry + 1):
+        for x in range(cx - rx, cx + rx + 1):
+            dx = (x - cx) / rx
+            dy = (y - cy) / ry
+            if dx * dx + dy * dy <= 1 and 0 <= x < W and 0 <= y < H:
+                px[x, y] = (28, 42, 30, 120)
+
+
 def shade_stone(px, rows, hi, base, sh):
     inside = set()
     for y, (l, r) in rows.items():
@@ -70,16 +81,18 @@ def shade_stone(px, rows, hi, base, sh):
             inside.add((x, y))
     top_y = min(rows)
     bot_y = max(rows)
+    # The whole front face is lit: base tone with a highlight on the top-left
+    # (where the light lands). The shadow tone is NOT painted across the face.
     for (x, y) in inside:
         l, r = rows[y]
         near_l = x - l
         near_r = r - x
         c = base
-        # lit top-left
-        if (near_l <= 1 and y < top_y + (bot_y - top_y) * 0.65) or y <= top_y + 1:
+        if (near_l <= 1 and y < top_y + (bot_y - top_y) * 0.7) or y <= top_y + 2:
             c = hi
-        # cool shadow bottom-right (wins)
-        if (near_r <= 1 and y > top_y + (bot_y - top_y) * 0.35) or y >= bot_y - 1:
+        # Thin right/bottom bevel = the stone's side/thickness turned away from
+        # the light (a different face, not the lit front).
+        if (near_r == 0 and y > top_y + 3) or y >= bot_y - 1:
             c = sh
         px[x, y] = c
     # outline
@@ -89,8 +102,6 @@ def shade_stone(px, rows, hi, base, sh):
                 nx, ny = x + dx, y + dy
                 if (nx, ny) not in inside and 0 <= nx < W and 0 <= ny < H:
                     px[nx, ny] = OUTLINE
-    # sparkle on the lit shoulder
-    px[top_y + 2, top_y] if False else None
     return inside, top_y, bot_y
 
 
@@ -162,6 +173,7 @@ def draw_grass(px):
 def make_variant(v):
     img = Image.new("RGBA", (W, H), CLEAR)
     px = img.load()
+    cast_shadow(px)
     if v == 4 or v == 5:
         rows = rounded(flat_top=True)
     elif v == 6:
