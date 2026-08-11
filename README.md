@@ -12,14 +12,13 @@ Loaded in order from `index.html`; wired together by `main.js` — no globals.
 
 | File | Responsibility |
 | --- | --- |
-| `scripts/pixelfont.js` | Tiny 3×5 bitmap font (`PixelFont.drawBox`), used to engrave names. |
 | `scripts/scene.js` | `Scene` — the meadow: baked grass + muddy puddles, swaying blades, flowers, rain and ripples. Exposes `update(dt, time)`, `draw()`, `onLanding(cb)`, `depthAt(y)`. |
-| `scripts/graveyard.js` | `Graveyard` — JSONBin data (`fetch`/`record`), pixel-art tombstones (`addStone`), and the raindrop-driven `reveal`. |
-| `scripts/duck.js` | `Duck` — cursor-following sprite (idle/walk/fly), naming, death animation, explosion, gravestone. |
+| `scripts/graveyard.js` | `Graveyard` — JSONBin data (`fetch`/`record`), the mound-and-cross graves (`addGrave`) with a click-to-read popup, and the raindrop-driven `reveal`. |
+| `scripts/duck.js` | `Duck` — cursor-following sprite (idle/walk/fly), naming, death animation, explosion, grave. |
 | `scripts/main.js` | Boots the three objects, runs one `requestAnimationFrame` loop, and the uptime clock. |
 
-Art is generated pixel-by-pixel: `tools/gen_gravestone.py` (Pillow) builds
-`animation/gravestones.png`. Lighting convention throughout: **light from the
+Art is generated pixel-by-pixel: `tools/gen_grave.py` (Pillow) builds
+`animation/graves.png`. Lighting convention throughout: **light from the
 top-left**, so faces are lit or shadowed but not both, and objects cast ground
 shadows.
 

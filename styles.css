@@ -47,34 +47,34 @@ body {
   height: 100%;
   pointer-events: none;
   image-rendering: pixelated;
-  z-index: -2;
+  z-index: -1;
 }
 
-/* Container for all the tombstones of named, killed ducks. */
+/* Container for all the graves of named, killed ducks. */
 #graveyard {
   position: fixed;
   inset: 0;
   pointer-events: none;
   overflow: hidden;
-  z-index: -1;
+  z-index: 1;
 }
 
-/* Horizon fog: distant (high on screen) gravestones dissolve into it, so you
-   can't tell how many of the dead there really are. */
+/* Horizon fog: distant (high on screen) graves fade into it, so you can't tell
+   how many of the dead there really are. Kept light so it eases in gently. */
 #fog {
   position: fixed;
   top: 0;
   left: 0;
   width: 100%;
-  height: 45%;
+  height: 55%;
   pointer-events: none;
-  z-index: 0;
+  z-index: 2;
   background: linear-gradient(
     to bottom,
-    #d3e8b0 0%,
-    rgba(200, 226, 172, 0.92) 22%,
-    rgba(200, 226, 172, 0.5) 55%,
-    rgba(200, 226, 172, 0) 100%
+    rgba(211, 232, 176, 0.7) 0%,
+    rgba(206, 226, 172, 0.4) 28%,
+    rgba(206, 226, 172, 0.15) 58%,
+    rgba(206, 226, 172, 0) 100%
   );
 }
 
@@ -85,7 +85,7 @@ body {
   display: flex;
   justify-content: flex-end;
   align-items: center;
-  z-index: 3;
+  z-index: 5;
 }
 
 .button {
@@ -111,7 +111,8 @@ body {
   font-size: 2.5rem;
   color: #2d2b30;
   text-shadow: 0 0 7px rgba(233, 244, 214, 0.8), 0 1px 0 rgba(233, 244, 214, 0.6);
-  z-index: 1;
+  pointer-events: none; /* let clicks reach graves underneath */
+  z-index: 3;
 }
 
 
@@ -133,7 +134,8 @@ body {
   font-size: 2.5rem;
   color: #2d2b30;
   text-shadow: 0 0 7px rgba(233, 244, 214, 0.8), 0 1px 0 rgba(233, 244, 214, 0.6);
-  z-index: 1;
+  pointer-events: none; /* let clicks reach graves underneath */
+  z-index: 3;
 }
 
 .pixel-pet {
@@ -143,7 +145,7 @@ body {
   background-repeat: no-repeat;
   image-rendering: pixelated;
   pointer-events: none;
-  z-index: 2;
+  z-index: 4;
   transform-origin: center;
 }
 
@@ -163,7 +165,7 @@ body {
   position: absolute;
   width: 40px;
   height: 14px;
-  z-index: 1;
+  z-index: 3;
   pointer-events: none;
   transform: translate(-50%, -50%);
   background: radial-gradient(ellipse at center, rgba(22, 38, 24, 0.38), rgba(22, 38, 24, 0));
@@ -172,7 +174,7 @@ body {
 /* Floating name label above a named duck. */
 .duck-name {
   position: absolute;
-  z-index: 2;
+  z-index: 4;
   font-family: 'Pixelify';
   font-weight: 600;
   font-size: 0.9rem;
@@ -191,7 +193,7 @@ body {
   top: 62%;
   left: 50%;
   transform: translate(-50%, -50%);
-  z-index: 3;
+  z-index: 5;
   text-align: center;
 }
 
@@ -218,26 +220,25 @@ body {
   box-shadow: 0 0 0 3px rgba(121, 87, 214, 0.3);
 }
 
-/* Debris flung out when a named duck explodes into a gravestone. */
+/* Debris flung out when a named duck explodes into a grave. */
 .duck-particle {
   position: absolute;
   width: 6px;
   height: 6px;
-  z-index: 2;
+  z-index: 4;
   image-rendering: pixelated;
   pointer-events: none;
 }
 
-/* Tombstones of named, killed ducks. Placed by perspective: near the bottom
-   they are large and clear, near the top they shrink and fade into the fog. */
+/* Earth-mound-and-cross graves of named, killed ducks. Placed by perspective:
+   near the bottom they are large and clear, near the top they shrink and fade
+   into the fog. Clicking a cross opens the info popup. */
 .gravestone {
   position: absolute;
-  pointer-events: none;
+  pointer-events: auto;
+  cursor: pointer;
 }
 .gravestone .lift {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
   transform-origin: bottom center;
   animation: grave-rise 0.7s ease-out both;
 }
@@ -251,9 +252,32 @@ body {
     transform: translate(-50%, -100%) scale(var(--s, 1));
   }
 }
-/* Pixel-art headstone: a canvas painted with the chosen sprite variant plus the
-   engraved name (see Graveyard.addStone in graveyard.js). */
-.gravestone .stone {
+.gravestone .cross {
   display: block;
   image-rendering: pixelated;
+}
+
+/* Info popup shown when a grave's cross is clicked. */
+.grave-popup {
+  position: fixed;
+  z-index: 6;
+  min-width: 130px;
+  max-width: 220px;
+  padding: 0.6rem 0.8rem;
+  font-family: 'Pixelify';
+  color: #f4ecd8;
+  background: #4a3524;
+  border: 2px solid #2f2116;
+  border-radius: 4px;
+  box-shadow: 0 3px 0 #241a10, 0 6px 14px rgba(0, 0, 0, 0.35);
+}
+.grave-popup .gp-name {
+  font-weight: 700;
+  font-size: 1.05rem;
+  margin-bottom: 0.25rem;
+  word-break: break-word;
+}
+.grave-popup .gp-line {
+  font-size: 0.85rem;
+  opacity: 0.9;
 }

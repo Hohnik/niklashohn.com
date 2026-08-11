@@ -77,16 +77,34 @@ class Scene {
   placePuddles() {
     this.puddles = [];
     const n = Math.max(4, Math.round(this.bw / 55));
-    for (let i = 0; i < n; i++) {
+    let attempts = 0;
+    while (this.puddles.length < n && attempts++ < n * 15) {
       const by = this.bh * (0.36 + Math.random() * 0.6);
       const depth = this.depthAtBuf(by);
       const rx = 7 + depth * 15;
-      const p = { x: Math.random() * this.bw, y: by, rx, ry: rx * (0.34 + depth * 0.22), flat: 0.34 + depth * 0.22, tint: Math.random(), radii: [] };
-      const S = 22, seed = Math.random() * 100;
+      const ry = rx * (0.34 + depth * 0.22);
+      const x = Math.random() * this.bw;
+      // Reject overlaps so pools don't merge into blobs.
+      let clear = true;
+      for (const q of this.puddles) {
+        if (Math.abs(x - q.x) < (rx + q.rx) * 1.1 && Math.abs(by - q.y) < (ry + q.ry) * 1.1) { clear = false; break; }
+      }
+      if (!clear) continue;
+
+      const p = { x, y: by, rx, ry, flat: ry / rx, tint: Math.random(), radii: [] };
+      // Irregular, elongated outline (noise lobes + a random long axis), then
+      // normalise so the longest reach is exactly rx.
+      const S = 24, seed = Math.random() * 100;
+      const stretch = 0.25 + Math.random() * 0.3, stretchAng = Math.random() * Math.PI;
+      let max = 0;
       for (let k = 0; k < S; k++) {
         const ang = (k / S) * Math.PI * 2;
-        p.radii.push(0.72 + this.vnoise(Math.cos(ang) * 1.7 + seed, Math.sin(ang) * 1.7 + seed) * 0.28);
+        const lobes = this.vnoise(Math.cos(ang) * 2.2 + seed, Math.sin(ang) * 2.2 + seed);
+        let r = (0.55 + lobes * 0.45) * (1 + stretch * Math.cos(2 * (ang - stretchAng)));
+        p.radii.push(r);
+        if (r > max) max = r;
       }
+      for (let k = 0; k < S; k++) p.radii[k] /= max;
       this.puddles.push(p);
     }
   }
@@ -137,8 +155,10 @@ class Scene {
         const fleck = this.vnoise(x * 0.7 + 11, y * 0.7 + 7);
         if (fleck > 0.83) c = this.lerpC(c, this.greens[Math.min(4, idx + 1)], 0.5);
         else if (fleck < 0.15) c = this.lerpC(c, this.greens[Math.max(0, idx - 1)], 0.5);
-        const haze = Math.max(0, 1 - this.depthAtBuf(y) / 0.34);
-        if (haze > 0) c = this.lerpC(c, this.hazeTint, haze * 0.82);
+        // Gentle horizon haze: eases in over the far half of the field and
+        // never fully hides the grass, so the fog doesn't slam shut at the top.
+        const haze = Math.max(0, (1 - this.depthAtBuf(y) - 0.45) / 0.55);
+        if (haze > 0) c = this.lerpC(c, this.hazeTint, Math.pow(haze, 1.9) * 0.6);
         const o = (y * this.bw + x) * 4;
         d[o] = c[0]; d[o + 1] = c[1]; d[o + 2] = c[2]; d[o + 3] = 255;
       }

@@ -30,6 +30,7 @@ class Duck {
     this.FW = 27;
     this.FH = 27;
     this.name = null;
+    this.born = Date.now();
     this.state = DuckState.WALK;
     this.frame = 0;
     this.frameT = 0;
@@ -163,9 +164,10 @@ class Duck {
     this.shadowEl.style.display = "none";
 
     const { x, y } = this.loc;
+    const duck = { name: this.name, died: new Date().toISOString(), age: (Date.now() - this.born) / 1000 };
     this.spawnExplosion(x, y);
-    this.graveyard.addStone(this.name, x, y, this.scene.depthAt(y));
-    this.graveyard.record({ name: this.name, died: new Date().toISOString() });
+    this.graveyard.addGrave(duck, x, y, this.scene.depthAt(y));
+    this.graveyard.record(duck);
     this.text.innerText = `Here lies ${this.name}.`;
     this.graveyard.reveal(this.name);
   }

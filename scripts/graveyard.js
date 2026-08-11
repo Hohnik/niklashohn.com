@@ -1,6 +1,6 @@
 // The shared duck graveyard: a JSONBin-backed list of every named, killed duck,
-// plus the pixel-art tombstones that surface one-per-raindrop after you bury
-// your own duck.
+// plus the little earth-mound-and-cross graves that surface one-per-raindrop
+// after you bury your own duck. Click a cross to read who lies there.
 //
 // NOTE: the access key is intentionally in the client (static site, throwaway
 // bin — nothing sensitive).
@@ -9,12 +9,21 @@ class Graveyard {
     this.scene = scene;
     this.container = document.getElementById("graveyard");
     this.sprite = new Image();
-    this.sprite.src = "animation/gravestones.png";
+    this.sprite.src = "animation/graves.png";
     this.queue = null;
 
     this.BIN = "6a63195df5f4af5e29ba3b47";
     this.KEY = "$2a$10$B7e3qwOWlelT5ySxHv4TU.exMmly0VBgd6P0bvANf/gSKV0O2dKpS";
     this.BASE = "https://api.jsonbin.io/v3/b";
+
+    // Shared info popup, shown when a cross is clicked.
+    this.popup = document.createElement("div");
+    this.popup.className = "grave-popup";
+    this.popup.style.display = "none";
+    this.popup.innerHTML = '<div class="gp-name"></div><div class="gp-line gp-died"></div><div class="gp-line gp-age"></div>';
+    this.popup.addEventListener("click", (e) => e.stopPropagation());
+    document.body.appendChild(this.popup);
+    document.addEventListener("click", () => { this.popup.style.display = "none"; });
   }
 
   // ---- data ----------------------------------------------------------------
@@ -48,11 +57,12 @@ class Graveyard {
     }
   }
 
-  // ---- tombstones ----------------------------------------------------------
+  // ---- graves --------------------------------------------------------------
 
-  // Build one tombstone at screen point (x, y). Perspective: nearer (lower on
-  // screen) => larger and drawn on top; farther => smaller, sinking into fog.
-  addStone(name, x, y, depth) {
+  // Plant one grave at screen point (x, y). Perspective: nearer (lower) => bigger
+  // and drawn on top; farther => smaller, sinking into the fog. `duck` carries
+  // { name, died, age } shown when the cross is clicked.
+  addGrave(duck, x, y, depth) {
     const grave = document.createElement("div");
     grave.className = "gravestone";
     grave.style.left = `${x}px`;
@@ -63,27 +73,44 @@ class Graveyard {
     lift.className = "lift";
     lift.style.setProperty("--s", (0.55 + depth * 0.6).toFixed(2));
 
-    const stone = document.createElement("canvas");
-    stone.className = "stone";
-    stone.width = Graveyard.W;
-    stone.height = Graveyard.H;
-    stone.style.width = `${Graveyard.W * Graveyard.DISP}px`;
-    stone.style.height = `${Graveyard.H * Graveyard.DISP}px`;
-    const ctx = stone.getContext("2d");
+    const cross = document.createElement("canvas");
+    cross.className = "cross";
+    cross.width = Graveyard.W;
+    cross.height = Graveyard.H;
+    cross.style.width = `${Graveyard.W * Graveyard.DISP}px`;
+    cross.style.height = `${Graveyard.H * Graveyard.DISP}px`;
+    const ctx = cross.getContext("2d");
     ctx.imageSmoothingEnabled = false;
     const v = Math.floor(Math.random() * Graveyard.VARIANTS);
-
     const paint = () => {
       ctx.clearRect(0, 0, Graveyard.W, Graveyard.H);
       ctx.drawImage(this.sprite, v * Graveyard.W, 0, Graveyard.W, Graveyard.H, 0, 0, Graveyard.W, Graveyard.H);
-      PixelFont.drawBox(ctx, name, 6, 23, 28, 17, "#3a3850"); // engrave the name
     };
     if (this.sprite.complete && this.sprite.naturalWidth) paint();
     else this.sprite.addEventListener("load", paint, { once: true });
 
-    lift.append(stone);
+    cross.addEventListener("click", (e) => {
+      e.stopPropagation();
+      this.showInfo(duck, e.clientX, e.clientY);
+    });
+
+    lift.append(cross);
     grave.append(lift);
     this.container.appendChild(grave);
+  }
+
+  showInfo(duck, cx, cy) {
+    this.popup.querySelector(".gp-name").textContent = duck.name || "Unknown";
+    this.popup.querySelector(".gp-died").textContent = `† died ${Graveyard.fmtDate(duck.died)}`;
+    const age = Graveyard.fmtAge(duck.age);
+    this.popup.querySelector(".gp-age").textContent = age ? `lived ${age}` : "age unknown";
+
+    this.popup.style.display = "block";
+    const pw = this.popup.offsetWidth, ph = this.popup.offsetHeight;
+    const px = cx + pw + 14 > window.innerWidth ? cx - pw - 14 : cx + 14;
+    const py = cy + ph + 14 > window.innerHeight ? cy - ph - 14 : cy + 14;
+    this.popup.style.left = `${Math.max(6, px)}px`;
+    this.popup.style.top = `${Math.max(6, py)}px`;
   }
 
   // ---- reveal --------------------------------------------------------------
@@ -93,7 +120,7 @@ class Graveyard {
   async reveal(myName) {
     const all = await this.fetch();
     const mine = all.findIndex((d) => d && d.name === myName);
-    if (mine >= 0) all.splice(mine, 1); // we already planted our own stone
+    if (mine >= 0) all.splice(mine, 1); // we already planted our own grave
     for (let i = all.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [all[i], all[j]] = [all[j], all[i]];
@@ -103,16 +130,31 @@ class Graveyard {
     this.scene.onLanding((p) => {
       if (!this.queue || this.queue.length === 0) return;
       const now = performance.now();
-      if (now - last < 260) return; // one stone per few raindrops
+      if (now - last < 260) return; // one grave per few raindrops
       last = now;
       const duck = this.queue.shift();
       const y = Math.min(window.innerHeight * 0.88, Math.max(window.innerHeight * 0.16, p.y));
-      this.addStone(duck.name || "Unknown", p.x, y, this.scene.depthAt(y));
+      this.addGrave(duck, p.x, y, this.scene.depthAt(y));
     });
+  }
+
+  static fmtDate(iso) {
+    const d = new Date(iso);
+    if (isNaN(d)) return "long ago";
+    return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+  }
+
+  static fmtAge(sec) {
+    if (sec == null || isNaN(sec)) return null;
+    sec = Math.floor(sec);
+    const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
+    if (h) return `${h}h ${m}m`;
+    if (m) return `${m}m ${s}s`;
+    return `${s}s`;
   }
 }
 // Sprite sheet: VARIANTS frames of W x H, shown at DISP scale.
-Graveyard.W = 40;
-Graveyard.H = 48;
-Graveyard.VARIANTS = 7;
+Graveyard.W = 24;
+Graveyard.H = 30;
+Graveyard.VARIANTS = 4;
 Graveyard.DISP = 1.6;
