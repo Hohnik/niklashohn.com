@@ -6,6 +6,9 @@
 //
 // Driven by main's loop via update(dt, time) + draw(). Other objects subscribe
 // to landings via onLanding(cb) and read perspective via depthAt(screenY).
+// 4x4 ordered-dither matrix, for banded pixel-art gradients.
+const BAYER4 = [[0, 8, 2, 10], [12, 4, 14, 6], [3, 11, 1, 9], [15, 7, 13, 5]];
+
 class Scene {
   constructor(canvas) {
     this.canvas = canvas;
@@ -28,12 +31,13 @@ class Scene {
     // Turf palette (dark -> light) + a dry yellow-green tint for variation.
     this.greens = [[58, 104, 56], [80, 140, 64], [104, 168, 74], [132, 192, 86], [156, 202, 92]];
     this.dryTint = [172, 184, 88];
-    // Atmospheric perspective: distant ground desaturates/lightens toward this
-    // horizon haze; the sky is a deeper blue overhead easing to the same haze
-    // at the horizon, with a faint glow right on the line.
-    this.hazeTint = [224, 230, 212];
-    this.skyZenith = [118, 160, 205];
-    this.skyGlow = [242, 244, 230];
+    // Crisp pixel-art sky: discrete blue bands (deep overhead -> light at the
+    // horizon), ordered-dithered at the seams. A thin haze sits only on the
+    // last rows of grass so the meadow stays saturated right up to the line.
+    this.skyBands = [
+      [84, 132, 190], [110, 156, 206], [142, 180, 218], [176, 204, 228], [212, 228, 236],
+    ];
+    this.hazeTint = [206, 224, 210];
     this.gBase = [92, 156, 70];
     this.gHi = [158, 204, 96];
     // Puddle water 3-tone + mud.
@@ -157,34 +161,31 @@ class Scene {
     const img = g.createImageData(this.bw, this.bh);
     const d = img.data;
     const hz = this.horizonY;
+    const sky = this.skyBands;
+    const HAZE = 5; // rows of thin haze just below the horizon
     for (let y = 0; y < this.bh; y++) {
       for (let x = 0; x < this.bw; x++) {
+        const th = (BAYER4[y & 3][x & 3] + 0.5) / 16;
         let c;
         if (y < hz) {
-          // Sky: deeper blue overhead, lightening to the haze at the horizon.
-          const t = hz <= 0 ? 1 : y / hz;
-          c = this.lerpC(this.skyZenith, this.hazeTint, Math.pow(t, 0.8));
+          // Dithered banded sky (deep overhead -> light at the horizon).
+          const t = hz <= 1 ? 1 : y / (hz - 1);
+          const fv = t * (sky.length - 1);
+          const lo = Math.floor(fv);
+          c = sky[fv - lo > th ? Math.min(lo + 1, sky.length - 1) : lo];
         } else {
-          const gd = (y - hz) / (this.bh - hz); // 0 far .. 1 near
-          const far = 1 - gd;
           const idx = Math.min(4, Math.floor(this.fbm(x * 0.045, y * 0.085) * 5));
           c = this.greens[idx].slice();
           const dry = this.fbm(x * 0.02 + 40, y * 0.03 + 40);
           if (dry > 0.62) c = this.lerpC(c, this.dryTint, Math.min(0.7, (dry - 0.62) * 2.2));
-          if (gd > 0.25) { // fine fleck texture only in the nearer, detailed ground
-            const fleck = this.vnoise(x * 0.7 + 11, y * 0.7 + 7);
-            if (fleck > 0.83) c = this.lerpC(c, this.greens[Math.min(4, idx + 1)], 0.5);
-            else if (fleck < 0.15) c = this.lerpC(c, this.greens[Math.max(0, idx - 1)], 0.5);
-          }
-          // Aerial perspective: with distance, desaturate, then lighten/cool by
-          // merging toward the horizon haze so the ground melts into the sky.
-          const lum = 0.3 * c[0] + 0.59 * c[1] + 0.11 * c[2];
-          c = this.lerpC(c, [lum, lum, lum], far * 0.45);
-          c = this.lerpC(c, this.hazeTint, Math.pow(far, 1.7) * 0.96);
+          const fleck = this.vnoise(x * 0.7 + 11, y * 0.7 + 7);
+          if (fleck > 0.83) c = this.lerpC(c, this.greens[Math.min(4, idx + 1)], 0.5);
+          else if (fleck < 0.15) c = this.lerpC(c, this.greens[Math.max(0, idx - 1)], 0.5);
+          // Thin dithered haze on just the far few rows, so the meadow stays
+          // saturated but doesn't butt hard against the sky.
+          const near = hz + HAZE - y;
+          if (near > 0 && near / HAZE > th) c = this.lerpC(c, this.hazeTint, 0.7);
         }
-        // Soft atmospheric glow right on the horizon line.
-        const dy = Math.abs(y - hz);
-        if (dy < 3) c = this.lerpC(c, this.skyGlow, (1 - dy / 3) * 0.5);
         const o = (y * this.bw + x) * 4;
         d[o] = c[0]; d[o + 1] = c[1]; d[o + 2] = c[2]; d[o + 3] = 255;
       }
@@ -302,12 +303,9 @@ class Scene {
     // ...then the lit, swaying blades (base body, highlighted tip).
     for (const bl of this.blades) {
       const sway = Math.sin(this.time * 1.4 + bl.phase) * bl.flex;
-      const fade = Math.max(0, 0.55 - this.depthAtBuf(bl.y)) * 1.4; // distant blades melt into haze
       for (let i = 0; i < bl.h; i++) {
         const off = Math.round((bl.lean + sway) * (i / bl.h));
-        let col = i >= bl.h - 2 || bl.shade > 0.7 ? this.gHi : this.gBase;
-        if (fade > 0) col = this.lerpC(col, this.hazeTint, Math.min(0.7, fade));
-        b.fillStyle = this.rgb(col);
+        b.fillStyle = this.rgb(i >= bl.h - 2 || bl.shade > 0.7 ? this.gHi : this.gBase);
         b.fillRect(bl.x + off, bl.y - i, 1, 1);
       }
     }
