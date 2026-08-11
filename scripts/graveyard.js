@@ -133,7 +133,8 @@ class Graveyard {
       if (now - last < 260) return; // one grave per few raindrops
       last = now;
       const duck = this.queue.shift();
-      const y = Math.min(window.innerHeight * 0.88, Math.max(window.innerHeight * 0.16, p.y));
+      // Keep graves on the ground (below the horizon) and fully on-screen.
+      const y = Math.min(window.innerHeight * 0.9, Math.max(this.scene.groundTop() + 8, p.y));
       this.addGrave(duck, p.x, y, this.scene.depthAt(y));
     });
   }

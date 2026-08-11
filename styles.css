@@ -66,15 +66,15 @@ body {
   top: 0;
   left: 0;
   width: 100%;
-  height: 55%;
+  height: 46%;
   pointer-events: none;
   z-index: 2;
   background: linear-gradient(
     to bottom,
-    rgba(211, 232, 176, 0.7) 0%,
-    rgba(206, 226, 172, 0.4) 28%,
-    rgba(206, 226, 172, 0.15) 58%,
-    rgba(206, 226, 172, 0) 100%
+    rgba(224, 230, 212, 0) 0%,
+    rgba(224, 230, 212, 0.1) 45%,
+    rgba(224, 230, 212, 0.46) 74%,
+    rgba(224, 230, 212, 0) 100%
   );
 }
 

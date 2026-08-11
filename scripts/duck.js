@@ -163,9 +163,10 @@ class Duck {
     this.label.style.display = "none";
     this.shadowEl.style.display = "none";
 
-    const { x, y } = this.loc;
+    const { x } = this.loc;
+    const y = Math.max(this.loc.y, this.scene.groundTop() + 8); // bury on the ground, not in the sky
     const duck = { name: this.name, died: new Date().toISOString(), age: (Date.now() - this.born) / 1000 };
-    this.spawnExplosion(x, y);
+    this.spawnExplosion(x, this.loc.y);
     this.graveyard.addGrave(duck, x, y, this.scene.depthAt(y));
     this.graveyard.record(duck);
     this.text.innerText = `Here lies ${this.name}.`;

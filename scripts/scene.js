@@ -28,7 +28,12 @@ class Scene {
     // Turf palette (dark -> light) + a dry yellow-green tint for variation.
     this.greens = [[58, 104, 56], [80, 140, 64], [104, 168, 74], [132, 192, 86], [156, 202, 92]];
     this.dryTint = [172, 184, 88];
-    this.hazeTint = [206, 226, 168];
+    // Atmospheric perspective: distant ground desaturates/lightens toward this
+    // horizon haze; the sky is a deeper blue overhead easing to the same haze
+    // at the horizon, with a faint glow right on the line.
+    this.hazeTint = [224, 230, 212];
+    this.skyZenith = [118, 160, 205];
+    this.skyGlow = [242, 244, 230];
     this.gBase = [92, 156, 70];
     this.gHi = [158, 204, 96];
     // Puddle water 3-tone + mud.
@@ -51,6 +56,7 @@ class Scene {
     this.canvas.height = this.H;
     this.bw = Math.ceil(this.W / this.PIXEL);
     this.bh = Math.ceil(this.H / this.PIXEL);
+    this.horizonY = Math.round(this.bh * 0.34); // meadow meets the sky here
     this.buf.width = this.grass.width = this.bw;
     this.buf.height = this.grass.height = this.bh;
     this.ctx.imageSmoothingEnabled = false;
@@ -66,8 +72,12 @@ class Scene {
     for (let i = 0; i < target; i++) this.drops.push(this.newDrop(true));
   }
 
-  depthAtBuf(by) { return Math.min(1, Math.max(0, by / this.bh)); }
-  depthAt(screenY) { return Math.min(1, Math.max(0, screenY / this.H)); }
+  // Depth is measured from the horizon (0 = far, at the horizon) to the bottom
+  // of the screen (1 = near), so the ground plane recedes correctly.
+  depthAtBuf(by) { return Math.min(1, Math.max(0, (by - this.horizonY) / (this.bh - this.horizonY))); }
+  depthAt(screenY) { const h = this.groundTop(); return Math.min(1, Math.max(0, (screenY - h) / (this.H - h))); }
+  groundTop() { return this.horizonY * this.PIXEL; }
+  groundY(f) { return this.horizonY + (this.bh - this.horizonY) * f; }
   onLanding(cb) { this.landingCbs.push(cb); }
   lerpC(a, b, t) { return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t]; }
   rgb(c) { return `rgb(${c[0] | 0},${c[1] | 0},${c[2] | 0})`; }
@@ -79,7 +89,7 @@ class Scene {
     const n = Math.max(4, Math.round(this.bw / 55));
     let attempts = 0;
     while (this.puddles.length < n && attempts++ < n * 15) {
-      const by = this.bh * (0.36 + Math.random() * 0.6);
+      const by = this.groundY(0.06 + Math.random() * 0.9);
       const depth = this.depthAtBuf(by);
       const rx = 7 + depth * 15;
       const ry = rx * (0.34 + depth * 0.22);
@@ -114,7 +124,7 @@ class Scene {
     const n = Math.round((this.bw * this.bh) / 150);
     let guard = 0;
     while (this.blades.length < n && guard++ < n * 3) {
-      const by = this.bh * (0.2 + Math.pow(Math.random(), 0.7) * 0.79); // biased near
+      const by = this.groundY(0.02 + Math.pow(Math.random(), 0.7) * 0.97); // biased near
       const bx = Math.floor(Math.random() * this.bw);
       if (this.puddleAt(bx, by)) continue;
       const depth = this.depthAtBuf(by);
@@ -133,7 +143,7 @@ class Scene {
     for (let i = 0; i < n; i++) {
       this.flowers.push({
         x: Math.floor(Math.random() * this.bw),
-        y: this.bh * (0.32 + Math.random() * 0.64),
+        y: this.groundY(0.12 + Math.random() * 0.86),
         color: this.petals[Math.floor(Math.random() * this.petals.length)],
         phase: Math.random() * Math.PI * 2,
       });
@@ -146,19 +156,35 @@ class Scene {
     const g = this.gctx;
     const img = g.createImageData(this.bw, this.bh);
     const d = img.data;
+    const hz = this.horizonY;
     for (let y = 0; y < this.bh; y++) {
       for (let x = 0; x < this.bw; x++) {
-        const idx = Math.min(4, Math.floor(this.fbm(x * 0.045, y * 0.085) * 5));
-        let c = this.greens[idx].slice();
-        const dry = this.fbm(x * 0.02 + 40, y * 0.03 + 40);
-        if (dry > 0.62) c = this.lerpC(c, this.dryTint, Math.min(0.7, (dry - 0.62) * 2.2));
-        const fleck = this.vnoise(x * 0.7 + 11, y * 0.7 + 7);
-        if (fleck > 0.83) c = this.lerpC(c, this.greens[Math.min(4, idx + 1)], 0.5);
-        else if (fleck < 0.15) c = this.lerpC(c, this.greens[Math.max(0, idx - 1)], 0.5);
-        // Gentle horizon haze: eases in over the far half of the field and
-        // never fully hides the grass, so the fog doesn't slam shut at the top.
-        const haze = Math.max(0, (1 - this.depthAtBuf(y) - 0.45) / 0.55);
-        if (haze > 0) c = this.lerpC(c, this.hazeTint, Math.pow(haze, 1.9) * 0.6);
+        let c;
+        if (y < hz) {
+          // Sky: deeper blue overhead, lightening to the haze at the horizon.
+          const t = hz <= 0 ? 1 : y / hz;
+          c = this.lerpC(this.skyZenith, this.hazeTint, Math.pow(t, 0.8));
+        } else {
+          const gd = (y - hz) / (this.bh - hz); // 0 far .. 1 near
+          const far = 1 - gd;
+          const idx = Math.min(4, Math.floor(this.fbm(x * 0.045, y * 0.085) * 5));
+          c = this.greens[idx].slice();
+          const dry = this.fbm(x * 0.02 + 40, y * 0.03 + 40);
+          if (dry > 0.62) c = this.lerpC(c, this.dryTint, Math.min(0.7, (dry - 0.62) * 2.2));
+          if (gd > 0.25) { // fine fleck texture only in the nearer, detailed ground
+            const fleck = this.vnoise(x * 0.7 + 11, y * 0.7 + 7);
+            if (fleck > 0.83) c = this.lerpC(c, this.greens[Math.min(4, idx + 1)], 0.5);
+            else if (fleck < 0.15) c = this.lerpC(c, this.greens[Math.max(0, idx - 1)], 0.5);
+          }
+          // Aerial perspective: with distance, desaturate, then lighten/cool by
+          // merging toward the horizon haze so the ground melts into the sky.
+          const lum = 0.3 * c[0] + 0.59 * c[1] + 0.11 * c[2];
+          c = this.lerpC(c, [lum, lum, lum], far * 0.45);
+          c = this.lerpC(c, this.hazeTint, Math.pow(far, 1.7) * 0.96);
+        }
+        // Soft atmospheric glow right on the horizon line.
+        const dy = Math.abs(y - hz);
+        if (dy < 3) c = this.lerpC(c, this.skyGlow, (1 - dy / 3) * 0.5);
         const o = (y * this.bw + x) * 4;
         d[o] = c[0]; d[o + 1] = c[1]; d[o + 2] = c[2]; d[o + 3] = 255;
       }
@@ -248,7 +274,7 @@ class Scene {
       d.y += d.vy * dt * (0.6 + this.depthAtBuf(d.y));
       const prob = 0.02 * (0.05 + Math.pow(this.depthAtBuf(d.y), 1.6)) * dt;
       if (d.y >= this.bh) { this.land(d.x, this.bh - 1); Object.assign(d, this.newDrop(false)); }
-      else if (d.y > 0 && Math.random() < prob) { this.land(d.x, Math.floor(d.y)); Object.assign(d, this.newDrop(false)); }
+      else if (d.y > this.horizonY && Math.random() < prob) { this.land(d.x, Math.floor(d.y)); Object.assign(d, this.newDrop(false)); }
     }
     for (const p of this.puddles) {
       if (Math.random() < 0.03 * dt) {
@@ -276,9 +302,12 @@ class Scene {
     // ...then the lit, swaying blades (base body, highlighted tip).
     for (const bl of this.blades) {
       const sway = Math.sin(this.time * 1.4 + bl.phase) * bl.flex;
+      const fade = Math.max(0, 0.55 - this.depthAtBuf(bl.y)) * 1.4; // distant blades melt into haze
       for (let i = 0; i < bl.h; i++) {
         const off = Math.round((bl.lean + sway) * (i / bl.h));
-        b.fillStyle = this.rgb(i >= bl.h - 2 || bl.shade > 0.7 ? this.gHi : this.gBase);
+        let col = i >= bl.h - 2 || bl.shade > 0.7 ? this.gHi : this.gBase;
+        if (fade > 0) col = this.lerpC(col, this.hazeTint, Math.min(0.7, fade));
+        b.fillStyle = this.rgb(col);
         b.fillRect(bl.x + off, bl.y - i, 1, 1);
       }
     }
