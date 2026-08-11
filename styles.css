@@ -252,7 +252,7 @@ body {
   }
 }
 /* Pixel-art headstone: a canvas painted with the chosen sprite variant plus the
-   engraved name (see createGravestone in raven.js). */
+   engraved name (see Graveyard.addStone in graveyard.js). */
 .gravestone .stone {
   display: block;
   image-rendering: pixelated;

@@ -1,18 +1,38 @@
-# These are some ideas to implement
+# niklashohn.com
 
-## Ideas
-1. Non standard hover animation [hilights](https://raphaelameaume.com/) (text marker style)
-2. Text on the website has a appearence [animation](https://soulwire.co.uk/) (fly in like powerpoint, decrypt, etc)
-3. Something from [NatureOfCode](https://natureofcode.com) or fractal flames or height lines
-4. Beautiful Images (landscape in my area, places)
-5. Some [projects](https://100.antfu.me/) for people to explore
-6. Increase size of the duck based on if it stands on something or height of the map in the background
-7. Dithered background like [this](https://xtcjs.app)
+A pixel-art portfolio landing page. A duck follows your cursor across a rainy
+grass meadow; name it and press the button you're told not to, and it explodes
+into a permanent gravestone in a **shared** graveyard that every visitor adds to.
 
-## Projectideas
+Static site, vanilla JS + `<canvas>`, no build step.
 
-### Image drawing vector
+## Architecture
 
-1. Generate edges of an [image](https://miro.medium.com/v2/resize:fit:644/1*S60hg-pTDfj_MPBY-HkXrA.png)
-2. Have a Vector (that draws a continuous line) move in a random direction
-with the probability higher flying towards the edges detected in the image
+Loaded in order from `index.html`; wired together by `main.js` — no globals.
+
+| File | Responsibility |
+| --- | --- |
+| `scripts/pixelfont.js` | Tiny 3×5 bitmap font (`PixelFont.drawBox`), used to engrave names. |
+| `scripts/scene.js` | `Scene` — the meadow: baked grass + muddy puddles, swaying blades, flowers, rain and ripples. Exposes `update(dt, time)`, `draw()`, `onLanding(cb)`, `depthAt(y)`. |
+| `scripts/graveyard.js` | `Graveyard` — JSONBin data (`fetch`/`record`), pixel-art tombstones (`addStone`), and the raindrop-driven `reveal`. |
+| `scripts/duck.js` | `Duck` — cursor-following sprite (idle/walk/fly), naming, death animation, explosion, gravestone. |
+| `scripts/main.js` | Boots the three objects, runs one `requestAnimationFrame` loop, and the uptime clock. |
+
+Art is generated pixel-by-pixel: `tools/gen_gravestone.py` (Pillow) builds
+`animation/gravestones.png`. Lighting convention throughout: **light from the
+top-left**, so faces are lit or shadowed but not both, and objects cast ground
+shadows.
+
+## Data
+
+Killed-and-named ducks are stored in a public JSONBin bin as `{ "ducks": [...] }`.
+The access key in `graveyard.js` is bin-scoped and intentionally client-side —
+nothing sensitive lives there.
+
+## Develop
+
+Serve the folder statically and open it:
+
+```sh
+python3 -m http.server 8000   # then visit http://localhost:8000
+```
