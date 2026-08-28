@@ -17,7 +17,7 @@ let animationFrameId; // To manage animation frames
 
 async function loadShader() {
   try {
-    const response = await fetch("scripts/shader.glsl");
+    const response = await fetch("shader.glsl");
     if (!response.ok) {
       throw new Error(`Failed to load shader: ${response.statusText}`);
     }

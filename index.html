@@ -1,25 +1,145 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Niklas Hohn</title>
-    <link rel="stylesheet" href="styles.css" />
-  </head>
-  <body>
-    <!--<canvas id="heightmap"></canvas>-->
-    <nav class="navbar">
-      <button id="trigger" class="button">Don't press here!!!</button>
-    </nav>
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Niklas Hohn — AI student, Moosburg</title>
+<meta name="description" content="Niklas Hohn — AI student in Moosburg, Germany. A portfolio you fly through: steer a paper plane over a shader-generated landscape to reach the About and Projects beacons." />
+<meta name="theme-color" content="#8aa7c4" />
+<meta property="og:title" content="Niklas Hohn" />
+<meta property="og:description" content="Fly a paper plane over a WebGL landscape to navigate the site." />
+<meta property="og:type" content="website" />
+<meta property="og:url" content="https://niklashohn.com/" />
+<link rel="canonical" href="https://niklashohn.com/" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%235b7f9e'/%3E%3Cpath d='M2 8 L13 3 L9 13 L7.5 8.5 Z' fill='%23fbfaf5'/%3E%3C/svg%3E" />
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
 
-    <h3 id="timer">00:00:00</h3>
-    <div id="text" class="hero-text">Hi, my name is Niklas</div>
+<canvas id="world" aria-hidden="true"></canvas>
 
-    <div id="pet" class="pixel-pet"></div>
-    <canvas id="glCanvas"></canvas>
-    <script src="scripts/raven.js"></script>
-    <script src="scripts/timer.js"></script>
-    <!--<script src="scripts/heightmap.js"></script>-->
-    <script src="scripts/shader.js" defer></script>
-  </body>
+<!-- Shown instead of the canvas when WebGL is unavailable. The
+     sheets below still work, so the site degrades to a plain
+     scrollable page rather than to nothing. -->
+<div id="glfail" class="glfail" hidden>
+  <p><strong>No WebGL here.</strong> The flying map needs it — everything else still works.</p>
+</div>
+
+<div id="labels" class="layer" aria-hidden="true"></div>
+
+<div id="hud" class="hud" aria-hidden="true">
+  <canvas id="radar" width="150" height="150"></canvas>
+  <div id="arrows" class="arrows"></div>
+  <div id="compass" class="compass"><div class="compass-strip"></div></div>
+</div>
+
+<div id="fps" class="fps" hidden>—</div>
+
+<p id="hint" class="hint">
+  <span class="k">&#8592;</span><span class="k">&#8594;</span> steer &middot;
+  <span class="k">shift</span> boost &middot; fly to a beacon
+</p>
+
+<main id="panel" class="panel" hidden>
+  <button id="panel-close" class="panel-close" type="button" aria-label="Leave this beacon">&times;</button>
+
+  <!-- ------------------------------------------------ HOME -->
+  <section class="doc" id="doc-home">
+    <p class="eyebrow">Beacon 01 &middot; Start</p>
+    <h1>Niklas&nbsp;Hohn</h1>
+    <p class="lead">AI student. Moosburg, Germany. I build things mostly to find out how they work.</p>
+    <p>You are looking at a landscape that does not exist anywhere — it is a noise function,
+       cut into 28 levels, with every level drawn a little higher than the one below it.
+       The paper plane is how you get around: there is nothing to click.</p>
+    <ul class="keys">
+      <li><span class="k">&#8592;</span> <span class="k">&#8594;</span> or <span class="k">A</span> <span class="k">D</span> — steer</li>
+      <li><span class="k">shift</span> or <span class="k">W</span> — boost</li>
+      <li><span class="k">1</span> <span class="k">2</span> <span class="k">3</span> — autopilot to a beacon</li>
+      <li><span class="k">esc</span> — peel off</li>
+      <li><span class="k">~</span> — dev mode: swap out every part of this page</li>
+    </ul>
+    <p class="quiet">On a phone: hold a finger anywhere and the plane flies to it.</p>
+  </section>
+
+  <!-- ----------------------------------------------- ABOUT -->
+  <section class="doc" id="doc-about">
+    <p class="eyebrow">Beacon 02 &middot; Who</p>
+    <h1>About</h1>
+    <p class="lead">Hi, Niklas here&nbsp;&#9996;&#65039;</p>
+    <p>I&rsquo;m an AI student based in Moosburg, Germany. Almost everything I&rsquo;ve
+       published falls into one of three piles.</p>
+
+    <h2>Learning by rebuilding</h2>
+    <p>A GPT-style transformer, backpropagation, word2vec, n-grams, seq2seq translation,
+       a semantic segmentation model — each written from scratch, because reading the
+       paper and running the library are not the same as having it work in your hands.</p>
+
+    <h2>Tools I actually needed</h2>
+    <p>A room-availability finder and a timetable for HAW Landshut. An email client that
+       behaves like a chat app instead of a filing cabinet. A cheat sheet for the shortcuts
+       I kept forgetting. A scanner for bowling pin sheets.</p>
+
+    <h2>Things that move</h2>
+    <p>The <em>Nature of Code</em> examples ported to pygame, generative shaders, and this map.</p>
+
+    <h2>Toolbox</h2>
+    <p class="chips">
+      <span>Python</span><span>PyTorch</span><span>NumPy</span><span>Pandas</span>
+      <span>JavaScript</span><span>TypeScript</span><span>React</span><span>Svelte</span>
+      <span>GLSL</span><span>Java</span><span>Docker</span><span>Linux</span>
+    </p>
+
+    <h2>How this page works</h2>
+    <p>One WebGL shader draws the whole world twice per frame. The first pass writes the
+       terrain height of every cell into a texture; the second asks, for each pixel,
+       <em>which layer lands on me?</em> — searching from the top level down, because a
+       fragment shader can colour itself but cannot move itself. The first hit wins, and
+       that is the entire fake perspective. Press <span class="k">~</span> to pull it apart.</p>
+
+    <p class="links">
+      <a href="https://github.com/Hohnik" target="_blank" rel="noopener">github.com/Hohnik</a>
+      <a href="mailto:niklaslhohn@gmail.com">niklaslhohn@gmail.com</a>
+    </p>
+  </section>
+
+  <!-- -------------------------------------------- PROJECTS -->
+  <section class="doc" id="doc-projects">
+    <p class="eyebrow">Beacon 03 &middot; What</p>
+    <h1>Projects</h1>
+    <p class="lead">Everything public on GitHub, newest and most-starred first.</p>
+    <div class="proj-tools">
+      <input id="proj-search" type="search" placeholder="filter&hellip;" aria-label="Filter projects" autocomplete="off" />
+      <div id="proj-langs" class="proj-langs"></div>
+    </div>
+    <div id="proj-list" class="proj-list">
+      <p class="quiet">Loading&hellip;</p>
+    </div>
+    <p id="proj-source" class="quiet"></p>
+  </section>
+</main>
+
+<nav id="quicknav" class="quicknav" aria-label="Fly to">
+  <button type="button" data-fly="home">Start</button>
+  <button type="button" data-fly="about">About</button>
+  <button type="button" data-fly="projects">Projects</button>
+  <a href="https://github.com/Hohnik" target="_blank" rel="noopener">GitHub</a>
+</nav>
+
+<div id="devbar" class="devbar" hidden></div>
+<button id="devchip" class="devchip" type="button" title="Dev mode (~)">dev</button>
+
+<noscript>
+  <style>#panel,.doc{display:block!important;position:static!important}#world,#hint,#quicknav,#devchip,.hud{display:none}</style>
+</noscript>
+
+<script src="scripts/shaders.js"></script>
+<script src="scripts/config.js"></script>
+<script src="scripts/content.js"></script>
+<script src="scripts/world.js"></script>
+<script src="scripts/flight.js"></script>
+<script src="scripts/projects.js"></script>
+<script src="scripts/ui.js"></script>
+<script src="scripts/devbar.js"></script>
+<script src="scripts/main.js"></script>
+</body>
 </html>

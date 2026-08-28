@@ -1,9 +1,9 @@
 const State = Object.freeze({
-  IDLE: { image: "./animation/raven_idle.png", framecount: 5, className: "idle" },
-  STAY: { image: "./animation/raven_stay.png", framecount: 1, className: "staying" },
-  WALK: { image: "./animation/raven_walk.png", framecount: 4, className: "walking" },
-  FLY: { image: "./animation/raven_fly.png", framecount: 6, className: "flying" },
-  DEAD: { image: "./animation/raven_death.png", framecount: 11, className: "dead" }
+  IDLE: { image: "../animation/raven_idle.png", framecount: 5, className: "idle" },
+  STAY: { image: "../animation/raven_stay.png", framecount: 1, className: "staying" },
+  WALK: { image: "../animation/raven_walk.png", framecount: 4, className: "walking" },
+  FLY: { image: "../animation/raven_fly.png", framecount: 6, className: "flying" },
+  DEAD: { image: "../animation/raven_death.png", framecount: 11, className: "dead" }
 })
 
 class PixelRaven {
@@ -165,7 +165,7 @@ class PixelRaven {
 }
 
 function initializeRaven() {
-  const imageUrls = ["animation/raven_stay.png", "animation/raven_walk.png", "animation/raven_death.png", "animation/raven_fly.png", "animation/raven_idle.png"];
+  const imageUrls = ["../animation/raven_stay.png", "../animation/raven_walk.png", "../animation/raven_death.png", "../animation/raven_fly.png", "../animation/raven_idle.png"];
   const imagePromises = imageUrls.map((url) => {
     return new Promise((resolve, reject) => {
       const img = new Image();

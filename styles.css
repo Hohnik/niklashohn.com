@@ -1,128 +1,520 @@
-@font-face {
-  font-family: 'Pixelify';
-  src: url('pixelify/PixelifySans-Regular.ttf') format('truetype');
-  font-weight: normal;
-  font-style: normal;
-  font-display: swap;
-}
-@font-face {
-  font-family: 'Pixelify';
-  src: url('pixelify/PixelifySans-Medium.ttf') format('truetype');
-  font-weight: 500;
-  font-style: normal;
-  font-display: swap;
-}
-@font-face {
-  font-family: 'Pixelify';
-  src: url('pixelify/PixelifySans-SemiBold.ttf') format('truetype');
-  font-weight: 600;
-  font-style: normal;
-  font-display: swap;
-}
-@font-face {
-  font-family: 'Pixelify';
-  src: url('pixelify/PixelifySans-Bold.ttf') format('truetype');
-  font-weight: bold;
-  font-style: normal;
-  font-display: swap;
+/* ============================================================
+   styles.css — the flat overlay on top of the shader.
+
+   Everything here sits above one canvas. Panels, HUD and dev bar
+   are plain DOM because text should be text: crisp, selectable
+   and readable by a screen reader, not baked into pixels.
+   ============================================================ */
+
+@font-face { font-family:'Pixelify'; src:url('pixelify/PixelifySans-Regular.ttf') format('truetype');
+             font-weight:400; font-display:swap; }
+@font-face { font-family:'Pixelify'; src:url('pixelify/PixelifySans-Medium.ttf') format('truetype');
+             font-weight:500; font-display:swap; }
+@font-face { font-family:'Pixelify'; src:url('pixelify/PixelifySans-SemiBold.ttf') format('truetype');
+             font-weight:600; font-display:swap; }
+@font-face { font-family:'Pixelify'; src:url('pixelify/PixelifySans-Bold.ttf') format('truetype');
+             font-weight:700; font-display:swap; }
+
+:root {
+  --mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+  --display: 'Pixelify', ui-monospace, monospace;
+
+  --ink: #1b1a17;
+  --paper: #fbf8f0;
+  --paper-edge: #e2dccb;
+  --accent: #c2410c;
+
+  --glass: rgba(18, 18, 21, .74);
+  --glass-line: rgba(255, 255, 255, .13);
+  --glass-text: #e9e7e2;
+  --glass-dim: #9c9a95;
+
+  --sheet-w: 34rem;
+  --gap: clamp(.75rem, 2vw, 1.25rem);
 }
 
-body, body * {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+/* Several elements below set `display` unconditionally, which
+   would otherwise beat the user-agent rule for [hidden] and leave
+   them on screen while JavaScript believes they are gone. */
+[hidden] { display: none !important; }
+
+html, body { height: 100%; }
 
 body {
-  background-color: #9a84cc;
-  height: 100vh;
   overflow: hidden;
+  background: #6f89a3;
+  font-family: var(--mono);
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
 }
 
-#heightmap {
+/* The canvas is sized in cells and scaled up by an exact integer
+   factor, so it can overhang the viewport by a few pixels. */
+#world {
   position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  pointer-events: none;
-  z-index: -1;
-}
-
-.navbar {
-  position: fixed;
-  width: 100%;
-  padding: 1rem;
-  display: flex;
-  justify-content: flex-end;
-  align-items: center;
-  z-index: 3;
-}
-
-.button {
-  padding: 0.5rem 1rem;
-  font-family: 'Pixelify';
-  font-size: 1rem;
-  font-weight: 600;
-  color: #ccd9ad;
-  background-color: #7957d6;
-  border: none;
-  border-radius: 0.375rem;
-  cursor: pointer;
-  transition: background-color 0.2s ease-in-out;
-  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
-}
-
-#timer{
-  position: absolute;
-  top: 100px;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  font-family: 'Pixelify';
-  font-size: 2.5rem;
-  color: #2d2b30;
-  z-index: 1;
-}
-
-
-.button:hover {
-  background-color: #5a3ca3;
-}
-
-.button:focus {
-  outline: none;
-  box-shadow: 0 0 0 3px rgba(121, 87, 214, 0.3);
-}
-
-.hero-text {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  font-family: 'Pixelify';
-  font-size: 2.5rem;
-  color: #2d2b30;
-  z-index: 1;
-}
-
-.pixel-pet {
-  position: absolute;
-  width: 54px;  /* 27px * 2 scale */
-  height: 54px; /* 27px * 2 scale */
-  background-repeat: no-repeat;
+  top: 0; left: 0;
+  display: block;
   image-rendering: pixelated;
-  pointer-events: none;
-  z-index: 2;
-  transform-origin: center;
+  image-rendering: crisp-edges;
+  z-index: 0;
 }
 
-.pixel-pet.walking {
-  background-image: url('animation/raven_walk.png');
-  background-size: auto 100%;
+.glfail {
+  position: fixed; inset: 0; z-index: 1;
+  display: grid; place-items: center; padding: 2rem;
+  background: #24303c; color: #dfe6ec; text-align: center;
 }
 
+.layer { position: fixed; inset: 0; z-index: 2; pointer-events: none; }
 
-.pixel-pet.dead {
-  background-image: url('animation/raven_death.png');
-  background-size: auto 100%;
+/* ---------------------------------------------------------
+   Floating landmark labels. Positioned from JS every frame at
+   the drawn top of each landmark mountain.
+   --------------------------------------------------------- */
+/* A pill rather than bare text: the label has to stay readable
+   over a snow cap and over deep water, in five palettes. */
+.mark-label {
+  position: absolute;
+  left: 0; top: 0;
+  transform: translate(-50%, -100%);
+  will-change: transform;
+  padding: .22rem .6rem .28rem;
+  border-radius: .5rem;
+  background: rgba(16, 16, 19, .74);
+  border: 1px solid rgba(255, 255, 255, .14);
+  backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+  font-family: var(--display);
+  font-size: .95rem;
+  line-height: 1.1;
+  text-align: center;
+  color: #fff;
+  white-space: nowrap;
+  transition: opacity .25s ease;
+}
+.mark-label b { display: block; font-weight: 600; letter-spacing: .02em; }
+.mark-label span {
+  display: block; margin-top: .15rem;
+  font-family: var(--mono); font-size: .62rem;
+  letter-spacing: .16em; text-transform: uppercase; opacity: .8;
+}
+.mark-label.near { background: rgba(20, 17, 8, .82); border-color: rgba(255, 233, 168, .4); }
+.mark-label.near b { color: #ffe9a8; }
+
+/* ---------------------------------------------------------
+   HUD — three interchangeable ways to find the beacons.
+   --------------------------------------------------------- */
+.hud { position: fixed; inset: 0; z-index: 2; pointer-events: none; }
+.hud > * { display: none; }
+body.hud-radar   #radar   { display: block; }
+body.hud-arrows  #arrows  { display: block; }
+body.hud-compass #compass { display: block; }
+
+/* Top right is the only corner nothing else claims: the sheet
+   docks left, the dev bar sits top centre, the quick nav bottom
+   centre and the dev chip bottom right. */
+#radar {
+  position: absolute;
+  right: var(--gap);
+  top: var(--gap);
+  width: 150px; height: 150px;
+  opacity: .95;
+  filter: drop-shadow(0 4px 14px rgba(0, 0, 0, .35));
+}
+body.dev-on #radar { top: calc(var(--gap) + 4.4rem); }
+
+.arrows { position: absolute; inset: 0; }
+.arrow {
+  position: absolute;
+  left: 0; top: 0;
+  transform: translate(-50%, -50%);
+  will-change: transform;
+  display: flex; flex-direction: column; align-items: center; gap: .1rem;
+  font-family: var(--mono); font-size: .58rem;
+  letter-spacing: .14em; text-transform: uppercase;
+  color: #fff; text-shadow: 0 1px 3px rgba(0, 0, 0, .7);
+}
+.arrow i {
+  display: block; width: 0; height: 0; font-style: normal;
+  border-left: 7px solid transparent;
+  border-right: 7px solid transparent;
+  border-bottom: 12px solid #fff;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, .6));
+}
+
+.compass {
+  position: absolute;
+  left: 50%; bottom: calc(var(--gap) + 3.1rem);
+  transform: translateX(-50%);
+  width: min(26rem, 78vw); height: 2.1rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--glass);
+  border: 1px solid var(--glass-line);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+.compass::after {
+  content: ''; position: absolute; left: 50%; top: 0; bottom: 0;
+  width: 1px; background: #fff; opacity: .85;
+}
+.compass-strip { position: absolute; inset: 0; }
+.compass-tick {
+  position: absolute; top: 50%; transform: translate(-50%, -50%);
+  font-family: var(--mono); font-size: .58rem;
+  letter-spacing: .14em; text-transform: uppercase;
+  color: var(--glass-text); white-space: nowrap;
+}
+.compass-tick.card { color: var(--glass-dim); }
+
+/* --------------------------------------------------------- */
+
+.fps {
+  position: fixed; top: var(--gap); left: var(--gap); z-index: 6;
+  font-family: var(--mono); font-size: .68rem;
+  padding: .25rem .5rem; border-radius: .35rem;
+  background: var(--glass); color: var(--glass-text);
+  border: 1px solid var(--glass-line);
+}
+
+.hint {
+  position: fixed; left: 50%; bottom: calc(var(--gap) + 3.1rem);
+  transform: translateX(-50%);
+  z-index: 3; pointer-events: none;
+  padding: .4rem .85rem; border-radius: 999px;
+  background: var(--glass); color: var(--glass-text);
+  border: 1px solid var(--glass-line);
+  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+  font-size: .72rem; white-space: nowrap;
+  transition: opacity .6s ease;
+}
+body.hud-compass .hint { bottom: calc(var(--gap) + 5.9rem); }
+.hint.gone { opacity: 0; }
+
+.k {
+  display: inline-block;
+  padding: .05rem .34rem; margin: 0 .06rem;
+  border-radius: .28rem;
+  background: rgba(255, 255, 255, .14);
+  border: 1px solid rgba(255, 255, 255, .22);
+  font-size: .92em; line-height: 1.35;
+}
+
+/* ---------------------------------------------------------
+   Quick nav. The buttons do not jump anywhere — they hand the
+   plane to the autopilot, so arriving always looks the same.
+   --------------------------------------------------------- */
+.quicknav {
+  position: fixed; left: 50%; bottom: var(--gap);
+  transform: translateX(-50%);
+  z-index: 5;
+  display: flex; gap: .25rem; padding: .25rem;
+  border-radius: 999px;
+  background: var(--glass);
+  border: 1px solid var(--glass-line);
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, .28);
+}
+.quicknav button, .quicknav a {
+  font: inherit; font-size: .74rem;
+  padding: .42rem .9rem; border: 0; border-radius: 999px;
+  background: transparent; color: var(--glass-dim);
+  cursor: pointer; text-decoration: none;
+  letter-spacing: .04em;
+  transition: background .16s, color .16s;
+}
+.quicknav button:hover, .quicknav a:hover { color: #fff; background: rgba(255, 255, 255, .1); }
+.quicknav button[aria-current='true'] { color: #16150f; background: #f4f1e6; }
+.quicknav a { color: var(--glass-dim); opacity: .8; }
+
+/* ---------------------------------------------------------
+   The sheets. Three looks, chosen in dev mode; the markup is
+   identical, only the skin changes.
+   --------------------------------------------------------- */
+.panel {
+  position: fixed;
+  z-index: 4;
+  left: 50%; top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(var(--sheet-w), 92vw);
+  max-height: min(74vh, 46rem);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 2rem 2rem 2.2rem;
+  font-size: .84rem;
+  line-height: 1.6;
+  animation: sheet-in .28s cubic-bezier(.2, .8, .3, 1);
+}
+@keyframes sheet-in {
+  from { opacity: 0; transform: translate(-50%, calc(-50% + 14px)); }
+}
+@media (prefers-reduced-motion: reduce) { .panel { animation: none; } }
+
+/* Docked to the left on wide screens, so the beacon it belongs
+   to stays visible on the right instead of hiding behind it. */
+@media (min-width: 60rem) {
+  .panel { left: 4vw; transform: translate(0, -50%); }
+  @keyframes sheet-in { from { opacity: 0; transform: translate(0, calc(-50% + 14px)); } }
+}
+@media (max-width: 40rem) {
+  .panel {
+    left: 0; top: auto; bottom: 0; transform: none;
+    width: 100%; max-height: 68vh;
+    padding: 1.5rem 1.25rem 4.6rem;
+    border-radius: 1rem 1rem 0 0;
+  }
+  @keyframes sheet-in { from { opacity: 0; transform: translateY(18px); } }
+}
+
+.doc { display: none; }
+.doc.on { display: block; }
+
+.panel h1 {
+  font-family: var(--display);
+  font-size: clamp(1.9rem, 5vw, 2.7rem);
+  font-weight: 700; line-height: 1;
+  margin: .1rem 0 .7rem;
+  letter-spacing: -.01em;
+}
+.panel h2 {
+  font-family: var(--mono);
+  font-size: .68rem; font-weight: 700;
+  letter-spacing: .18em; text-transform: uppercase;
+  margin: 1.5rem 0 .35rem;
+  opacity: .62;
+}
+.panel p + p { margin-top: .7rem; }
+.eyebrow {
+  font-size: .6rem; letter-spacing: .2em; text-transform: uppercase;
+  opacity: .5;
+}
+.lead { font-size: .95rem; line-height: 1.55; margin-bottom: .9rem; }
+.quiet { opacity: .55; font-size: .76rem; margin-top: .9rem; }
+
+.keys { list-style: none; margin: 1rem 0 0; display: grid; gap: .38rem; font-size: .78rem; }
+.panel .k {
+  background: rgba(0, 0, 0, .07);
+  border-color: rgba(0, 0, 0, .14);
+}
+
+.chips { display: flex; flex-wrap: wrap; gap: .3rem; margin-top: .5rem; }
+.chips span {
+  font-size: .68rem; padding: .2rem .55rem;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+  opacity: .62;
+}
+
+.links { margin-top: 1.6rem; display: flex; flex-wrap: wrap; gap: 1rem; }
+.panel a { color: inherit; text-underline-offset: .18em; text-decoration-thickness: 1px; }
+.panel a:hover { text-decoration-style: wavy; }
+
+.panel-close {
+  position: sticky; float: right; top: 0;
+  z-index: 1;
+  width: 1.9rem; height: 1.9rem; margin: -.6rem -.6rem 0 0;
+  display: grid; place-items: center;
+  font: inherit; font-size: 1.15rem; line-height: 1;
+  border: 0; border-radius: 50%;
+  background: rgba(0, 0, 0, .07); color: inherit;
+  cursor: pointer;
+}
+.panel-close:hover { background: rgba(0, 0, 0, .15); }
+
+/* -- skin: paper (default) -- */
+body.panel-paper .panel {
+  background: var(--paper);
+  color: var(--ink);
+  border: 1px solid var(--paper-edge);
+  border-radius: .2rem;
+  box-shadow: 10px 10px 0 rgba(20, 18, 12, .16), 0 22px 50px rgba(0, 0, 0, .22);
+  background-image: repeating-linear-gradient(
+    180deg, rgba(0, 0, 0, .022) 0 1px, transparent 1px 26px);
+}
+body.panel-paper .panel h1 { color: #14130f; }
+body.panel-paper .eyebrow { color: var(--accent); opacity: .9; }
+
+/* -- skin: card -- */
+body.panel-card .panel {
+  background: rgba(16, 18, 22, .9);
+  color: #e8e6e1;
+  border: 1px solid rgba(255, 255, 255, .12);
+  border-radius: 1.1rem;
+  box-shadow: 0 26px 60px rgba(0, 0, 0, .45);
+  backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+}
+body.panel-card .panel .k, body.panel-card .panel-close {
+  background: rgba(255, 255, 255, .1); border-color: rgba(255, 255, 255, .2);
+}
+body.panel-card .eyebrow { color: #8ad4ff; opacity: .9; }
+
+/* -- skin: terminal -- */
+body.panel-terminal .panel {
+  background: #05080a;
+  color: #86f0a8;
+  border: 1px solid #1d4a2c;
+  border-radius: .25rem;
+  box-shadow: 0 0 0 1px rgba(134, 240, 168, .12), 0 20px 50px rgba(0, 0, 0, .6);
+  font-family: var(--mono);
+  text-shadow: 0 0 6px rgba(120, 255, 160, .28);
+  background-image: repeating-linear-gradient(
+    180deg, rgba(134, 240, 168, .05) 0 1px, transparent 1px 3px);
+}
+body.panel-terminal .panel h1 { font-family: var(--mono); font-size: 1.6rem; letter-spacing: .02em; }
+body.panel-terminal .panel h1::before { content: '> '; opacity: .5; }
+body.panel-terminal .panel .k, body.panel-terminal .panel-close {
+  background: rgba(134, 240, 168, .12); border-color: rgba(134, 240, 168, .3);
+}
+body.panel-terminal .eyebrow { color: #86f0a8; }
+body.panel-terminal .chips span { border-color: #2e7f4c; }
+
+/* ---------------------------------------------------------
+   Projects list
+   --------------------------------------------------------- */
+.proj-tools { display: flex; gap: .5rem; align-items: center; margin: .9rem 0 .3rem; flex-wrap: wrap; }
+#proj-search {
+  font: inherit; font-size: .78rem;
+  padding: .38rem .7rem; flex: 1 1 8rem; min-width: 7rem;
+  border-radius: .4rem;
+  border: 1px solid currentColor;
+  background: transparent; color: inherit;
+  opacity: .75;
+}
+#proj-search:focus { outline: 2px solid currentColor; outline-offset: 1px; opacity: 1; }
+.proj-langs { display: flex; gap: .25rem; flex-wrap: wrap; }
+.proj-langs button {
+  font: inherit; font-size: .66rem;
+  padding: .25rem .55rem; border-radius: 999px; cursor: pointer;
+  border: 1px solid currentColor; background: transparent; color: inherit;
+  opacity: .5;
+}
+.proj-langs button[aria-pressed='true'] { opacity: 1; background: rgba(127, 127, 127, .22); }
+
+.proj-list { margin-top: .7rem; display: grid; gap: .1rem; }
+.proj {
+  display: block; text-decoration: none; color: inherit;
+  padding: .6rem .7rem;
+  border-radius: .4rem;
+  border: 1px solid transparent;
+  transition: background .14s, border-color .14s, transform .14s;
+}
+.proj:hover { background: rgba(127, 127, 127, .13); border-color: rgba(127, 127, 127, .3); transform: translateX(2px); }
+.proj-top { display: flex; align-items: baseline; gap: .5rem; }
+.proj-name { font-family: var(--display); font-size: 1rem; font-weight: 600; flex: 1 1 auto; }
+.proj-star { font-size: .72rem; opacity: .75; white-space: nowrap; }
+.proj-desc { font-size: .76rem; opacity: .72; margin-top: .12rem; }
+.proj-meta { font-size: .66rem; opacity: .5; margin-top: .2rem; display: flex; align-items: center; gap: .35rem; }
+.dot { width: .55em; height: .55em; border-radius: 50%; display: inline-block; background: #888; }
+
+/* ---------------------------------------------------------
+   Dev mode. One row per feature group, rendered from the
+   registry in config.js.
+   --------------------------------------------------------- */
+.devchip {
+  position: fixed; right: var(--gap); bottom: var(--gap); z-index: 7;
+  font: inherit; font-size: .62rem;
+  letter-spacing: .18em; text-transform: uppercase;
+  padding: .45rem .75rem; border-radius: 999px; cursor: pointer;
+  background: var(--glass); color: var(--glass-dim);
+  border: 1px solid var(--glass-line);
+  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+}
+.devchip:hover { color: #fff; }
+body.dev-on .devchip { color: #16150f; background: #f4f1e6; border-color: transparent; }
+
+.devbar {
+  position: fixed; top: var(--gap); left: 50%;
+  transform: translateX(-50%);
+  z-index: 7;
+  max-width: calc(100vw - 2 * var(--gap));
+  display: flex; align-items: stretch; gap: .1rem;
+  padding: .45rem .6rem;
+  border-radius: 1.15rem;
+  background: var(--glass);
+  border: 1px solid var(--glass-line);
+  backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  box-shadow: 0 10px 34px rgba(0, 0, 0, .38);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.devbar::-webkit-scrollbar { display: none; }
+.devbar hr {
+  width: 1px; border: 0; margin: .35rem .4rem;
+  background: var(--glass-line); flex: 0 0 auto;
+}
+
+.dev-item {
+  display: flex; flex-direction: column; align-items: center; gap: .22rem;
+  padding: 0 .18rem; flex: 0 0 auto;
+}
+.dev-item > label {
+  font-size: .52rem; letter-spacing: .16em; text-transform: uppercase;
+  color: var(--glass-dim); white-space: nowrap;
+}
+.dev-cycle {
+  font: inherit; font-size: .72rem;
+  min-width: 4.4rem; padding: .3rem .7rem;
+  border-radius: 999px; cursor: pointer;
+  background: rgba(255, 255, 255, .1);
+  border: 1px solid transparent;
+  color: var(--glass-text);
+  white-space: nowrap;
+  transition: background .14s;
+}
+.dev-cycle:hover { background: rgba(255, 255, 255, .2); }
+.dev-cycle:active { transform: translateY(1px); }
+
+.dev-toggle {
+  position: relative;
+  width: 2.35rem; height: 1.24rem;
+  border: 0; border-radius: 999px; cursor: pointer;
+  background: rgba(255, 255, 255, .16);
+  transition: background .16s;
+}
+.dev-toggle::after {
+  content: ''; position: absolute; top: .17rem; left: .17rem;
+  width: .9rem; height: .9rem; border-radius: 50%;
+  background: #b9b7b2;
+  transition: transform .16s, background .16s;
+}
+.dev-toggle[aria-pressed='true'] { background: #f4f1e6; }
+.dev-toggle[aria-pressed='true']::after { transform: translateX(1.11rem); background: #16150f; }
+
+.dev-actions { display: flex; flex-direction: column; gap: .22rem; justify-content: flex-end; }
+.dev-actions button {
+  font: inherit; font-size: .58rem;
+  letter-spacing: .1em; text-transform: uppercase;
+  padding: .22rem .55rem; border-radius: .45rem; cursor: pointer;
+  background: rgba(255, 255, 255, .1); color: var(--glass-text); border: 0;
+}
+.dev-actions button:hover { background: rgba(255, 255, 255, .22); }
+
+@media (max-width: 52rem) {
+  .devbar { justify-content: flex-start; border-radius: .9rem; }
+  #radar { width: 108px; height: 108px; }
+  .hint { font-size: .66rem; }
+}
+
+/* On a phone the sheet is a bottom drawer and the dev bar eats the
+   top edge, so there is nowhere left for the radar to live. */
+@media (max-width: 40rem) {
+  body.sheet-open #radar, body.dev-on #radar { display: none; }
+  /* The quick nav needs the whole width down there, so the dev
+     chip moves up out of its way instead of sitting on the
+     GitHub link. */
+  .devchip { bottom: calc(var(--gap) + 3.6rem); }
+  .quicknav { width: calc(100vw - 2 * var(--gap)); justify-content: space-around; }
+  .quicknav button, .quicknav a { padding: .42rem .5rem; }
+}
+
+/* Keep the floating bars clear of the home indicator. */
+@supports (padding: env(safe-area-inset-bottom)) {
+  .quicknav { bottom: calc(var(--gap) + env(safe-area-inset-bottom)); }
+  .devchip { bottom: calc(var(--gap) + env(safe-area-inset-bottom)); }
+  @media (max-width: 40rem) {
+    .devchip { bottom: calc(var(--gap) + 3.6rem + env(safe-area-inset-bottom)); }
+  }
+  .panel { padding-bottom: calc(4.6rem + env(safe-area-inset-bottom)); }
 }
