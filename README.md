@@ -16,6 +16,7 @@ Live: <https://niklashohn.com>
 | `H` | fly home |
 | `esc` | peel off, close the sheet |
 | `~` | dev mode |
+| `?` | the full list of keys |
 
 On a touch screen, hold a finger anywhere and the plane flies to it.
 `#about` and `#projects` are real deep links — they drop the plane
@@ -86,7 +87,9 @@ faked by rounding.
 3. **Shading.** Palette, contour ink, relief shading, water, cloud
    shadows, landmarks, the plane, its shadow and its trail. The plane is
    drawn as maths rather than a sprite: two triangles as half-planes, so
-   it turns to any angle for free and still lands on whole cells.
+   it turns to any angle for free and still lands on whole cells. It also
+   banks into its turns — the shape is narrowed by `cos(bank)`, which is
+   the same wing seen from the front.
 
 The gap between the plane and its shadow is what reads as altitude, and it
 closes by itself when the plane crosses a peak.
@@ -95,7 +98,14 @@ Passes 1 and 2 depend only on where the camera is and how the terrain is
 configured, never on the plane — so they are skipped entirely on any frame
 where none of that changed. That is most of the frame's work saved
 whenever the camera settles, which is exactly when a sheet is open and
-someone is reading.
+someone is reading. The forest mask rides along in the height texture's
+green channel for the same reason: it depends only on world position, so
+it costs four sines once per cell rather than four sines per pixel per
+frame.
+
+Losing the GPU — which a phone will do just for switching tabs — is
+handled rather than fatal: the renderer stops, and everything that
+belonged to the context is rebuilt when it comes back.
 
 ## Layout
 
@@ -114,7 +124,9 @@ scripts/ui.js       sheets, help, routing, keyboard
 scripts/devbar.js   the variant switcher
 scripts/main.js     wiring and the frame loop
 tools/verify.mjs    the browser test suite
-tools/serve.mjs     a static server for local work
+tools/og.mjs        renders og.png, the social card, from the site
+tools/serve.mjs     `npm start`
+tools/static-server.mjs   the one static server all three share
 legacy/             the previous site (the raven), still runnable
 ```
 
@@ -134,18 +146,21 @@ scrollable, so the content is never behind the graphics.
 ```
 npm install
 npm test              # npm run test:keep leaves the screenshots behind
+npm start             # serve the directory on :8743
+npm run og            # re-render og.png from the live page
 ```
 
 `tools/verify.mjs` serves the directory and drives a headless Chromium
-through 83 checks: that the world renders, that flying to a beacon opens
+through 99 checks: that the world renders, that flying to a beacon opens
 the right sheet and updates the URL, that typing in the project filter
 does not steer the plane, that **every** variant of every feature compiles,
 draws something, and draws something *different* from its neighbours, that
 the layout holds at three viewport sizes with the dev bar open, that
 choices survive a reload, that the no-WebGL and reduced-motion paths still
 give you the content, that a shared look link restores the look and a
-malformed one is refused, and that the terrain passes really are skipped
-once the camera settles. It runs on every push
+malformed one is refused, that the terrain passes really are skipped once
+the camera settles, and that losing and regaining the GPU leaves the page
+drawing rather than blank. It runs on every push
 (`.github/workflows/verify.yml`) and uploads the screenshots when it fails.
 
 ## Ideas still on the list

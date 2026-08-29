@@ -14,11 +14,24 @@ NH.Projects = (function () {
   const CACHE_KEY = 'nh.projects.v1';
   const CACHE_TTL = 6 * 60 * 60 * 1000;
 
+  const SORTS = [
+    { id: 'stars', label: 'Stars',
+      cmp: function (a, b) { return (b.stars - a.stars) || byDate(a, b); } },
+    { id: 'recent', label: 'Recent', cmp: byDate },
+    { id: 'name', label: 'A–Z',
+      cmp: function (a, b) { return a.name.toLowerCase() < b.name.toLowerCase() ? -1 : 1; } }
+  ];
+
   let items = NH.PROJECTS_STATIC;
   let source = 'bundled list';
   let filterText = '';
   let filterLang = null;
+  let sortId = 'stars';
   let loaded = null;         // in-flight or finished live fetch
+
+  function byDate(a, b) {
+    return a.updated < b.updated ? 1 : a.updated > b.updated ? -1 : 0;
+  }
 
   function readCache() {
     try {
@@ -45,12 +58,11 @@ NH.Projects = (function () {
           stars: r.stargazers_count || 0,
           url: r.html_url,
           updated: (r.pushed_at || r.updated_at || '').slice(0, 10),
-          archived: !!r.archived
+          archived: !!r.archived,
+          topics: Array.isArray(r.topics) ? r.topics.slice(0, 5) : []
         };
       })
-      .sort(function (a, b) {
-        return (b.stars - a.stars) || (a.updated < b.updated ? 1 : a.updated > b.updated ? -1 : 0);
-      });
+      .sort(function (a, b) { return (b.stars - a.stars) || byDate(a, b); });
   }
 
   function fetchLive() {
@@ -95,11 +107,12 @@ NH.Projects = (function () {
 
   function visible() {
     const q = filterText.trim().toLowerCase();
+    const cmp = (SORTS.filter(function (s) { return s.id === sortId; })[0] || SORTS[0]).cmp;
     return items.filter(function (p) {
       if (filterLang && p.lang !== filterLang) return false;
       if (!q) return true;
       return (p.name + ' ' + (p.desc || '') + ' ' + (p.lang || '')).toLowerCase().indexOf(q) >= 0;
-    });
+    }).slice().sort(cmp);
   }
 
   const esc = NH.util.escapeHtml;
@@ -126,6 +139,11 @@ NH.Projects = (function () {
         '</span>' +
         (p.desc ? '<span class="proj-desc">' + esc(p.desc) + '</span>' : '') +
         '<span class="proj-meta">' + meta.join('<span>&middot;</span>') + '</span>' +
+        (p.topics && p.topics.length
+          ? '<span class="proj-topics">' + p.topics.map(function (t) {
+              return '<span>' + esc(t) + '</span>';
+            }).join('') + '</span>'
+          : '') +
         '</a>';
     }).join('');
   }
@@ -148,7 +166,37 @@ NH.Projects = (function () {
     });
   }
 
+  /* Built once, then only the pressed state changes — rebuilding
+     the buttons on every sort would throw away the listeners and
+     the focus along with them. */
+  function buildSorts() {
+    const box = document.getElementById('proj-sort');
+    if (!box || box.childElementCount) return;
+    SORTS.forEach(function (s) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.dataset.sort = s.id;
+      b.textContent = s.label;
+      b.addEventListener('click', function () {
+        sortId = s.id;
+        syncSorts();
+        renderList();
+      });
+      box.appendChild(b);
+    });
+  }
+
+  function syncSorts() {
+    const box = document.getElementById('proj-sort');
+    if (!box) return;
+    Array.prototype.forEach.call(box.querySelectorAll('button'), function (b) {
+      b.setAttribute('aria-pressed', String(b.dataset.sort === sortId));
+    });
+  }
+
   function render() {
+    buildSorts();
+    syncSorts();
     renderLangs();
     renderList();
     const note = document.getElementById('proj-source');

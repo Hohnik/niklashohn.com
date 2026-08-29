@@ -20,6 +20,11 @@ NH.World = (function () {
   let cellW = 0, cellH = 0, texW = 0, texH = 0, pixel = 0, pad = 0;
   let hU = {}, vU = {}, mU = {}, trailU = [];
   let failure = null;
+  /* The browser may take the GPU back at any time — switching
+     tabs on a phone is enough. Everything built against the old
+     context is gone when it does, so drawing has to stop until it
+     has all been built again. */
+  let lost = false;
 
   /* Passes 1 and 2 only depend on where the camera is and how the
      terrain is configured — never on the plane. Whenever none of
@@ -68,6 +73,24 @@ NH.World = (function () {
     gl = canvas.getContext('webgl', opts) || canvas.getContext('experimental-webgl', opts);
     if (!gl) { failure = 'This browser has no WebGL.'; return false; }
 
+    canvas.addEventListener('webglcontextlost', function (e) {
+      /* Without preventDefault the browser will not bother to
+         restore it, and the page is a blank rectangle for good. */
+      e.preventDefault();
+      lost = true;
+    });
+    canvas.addEventListener('webglcontextrestored', function () {
+      if (build()) { lost = false; resize(); }
+    });
+
+    if (!build()) return false;
+    resize();
+    return true;
+  }
+
+  /* Everything that belongs to the GL context, in one function, so
+     it can be run again after a restore. */
+  function build() {
     try {
       /* highp is only a *minimum* guarantee in WebGL 1. Where the
          fragment stage has none, drop the whole shader to mediump
@@ -96,7 +119,7 @@ NH.World = (function () {
     vU = uniforms(visProg, ['u_height', 'u_texSize', 'u_pad', 'u_lift']);
     mU = uniforms(mainProg, ['u_height', 'u_visible', 'u_texSize', 'u_res', 'u_cam', 'u_pad',
       'u_lift', 'u_sea', 'u_seed', 'u_time', 'u_palette', 'u_inkMode', 'u_light',
-      'u_waterStyle', 'u_clouds', 'u_fog', 'u_plane', 'u_hover', 'u_planeSize',
+      'u_waterStyle', 'u_clouds', 'u_fog', 'u_plane', 'u_bank', 'u_hover', 'u_planeSize',
       'u_planeKind', 'u_planeOn', 'u_shadowOn', 'u_occlude',
       'u_m0', 'u_m1', 'u_m2', 'u_markStyle', 'u_trailMode']);
     trailU = [];
@@ -108,8 +131,7 @@ NH.World = (function () {
     visFbo = gl.createFramebuffer();
     heightTex = newTarget();
     visTex = newTarget();
-
-    resize();
+    terrainKey = null;
     return true;
   }
 
@@ -140,7 +162,7 @@ NH.World = (function () {
   /* Size the canvas in cells and give it an exact integer CSS
      scale, so the pixel grid never lands on a half pixel. */
   function resize() {
-    if (!gl) return;
+    if (!gl || lost) return;
     pixel = NH.cfg.get('pixel');
     /* The height texture only has to reach as far below the screen
        as the layer search actually looks, which is LEVELS * lift
@@ -178,7 +200,7 @@ NH.World = (function () {
   }
 
   function render(s) {
-    if (!gl) return;
+    if (!gl || lost) return;
     const lift = liftNow();
     /* The camera lands on whole cells. A fractional camera would
        make the entire terrain shimmer as it slid between cells. */
@@ -249,6 +271,7 @@ NH.World = (function () {
     gl.uniform1f(mU.u_clouds, NH.cfg.get('clouds') ? 1 : 0);
     gl.uniform1f(mU.u_fog, NH.cfg.get('fog') ? 1 : 0);
     gl.uniform3f(mU.u_plane, s.plane.x, s.plane.y, s.plane.heading);
+    gl.uniform1f(mU.u_bank, s.plane.bank);
     gl.uniform1f(mU.u_hover, NH.HOVER);
     gl.uniform1f(mU.u_planeSize, NH.PLANE_SIZE);
     gl.uniform1i(mU.u_planeKind, NH.cfg.get('plane'));
@@ -284,6 +307,7 @@ NH.World = (function () {
     get cells() { return { w: cellW, h: cellH, pixel: pixel }; },
     get stats() { return { passesRun: passesRun, passesSkipped: passesSkipped }; },
     get error() { return failure; },
+    get lost() { return lost; },
     get ok() { return !!gl; }
   };
 })();

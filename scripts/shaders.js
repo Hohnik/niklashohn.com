@@ -196,9 +196,18 @@ void main() {
 
     float level = max(clamp(floor(h * LEVELS), 0.0, LEVELS), u_sea);
 
-    /* /32 keeps every level on an exact 8-bit step, so the read
-       back in the later passes is lossless. */
-    gl_FragColor = vec4(level / 32.0, 0.0, 0.0, 1.0);
+    /* A second, unrelated slice of the same noise field decides
+       where forest grows. It is baked here rather than sampled in
+       the shading pass because it depends only on world position:
+       computing it here costs four sines once per cell and then
+       nothing at all while the camera holds still, instead of four
+       sines per pixel every single frame.
+
+       R: the level, on an exact 8-bit step (/32) so the read back
+       in the later passes is lossless. G: the forest mask, where
+       eight bits is plenty for a threshold. */
+    float forest = vnoise(w * 0.045 + u_seed + 50.0);
+    gl_FragColor = vec4(level / 32.0, forest, 0.0, 1.0);
 }
 `;
 
@@ -268,6 +277,7 @@ uniform float u_clouds;
 uniform float u_fog;
 
 uniform vec3  u_plane;     // world xy + heading in radians
+uniform float u_bank;      // roll, in radians
 uniform float u_hover;     // levels the plane flies above the ground
 uniform float u_planeSize;
 uniform int   u_planeKind;
@@ -286,11 +296,14 @@ uniform int   u_trailMode; // 0 off, 1 dots, 2 ribbon
 const float LEVELS = ${NH.LEVELS}.0;
 ${NOISE_GLSL}
 
+vec2 heightUV(vec2 cell) {
+    return (vec2(cell.x, cell.y + u_pad) + 0.5) / u_texSize;
+}
+
 /* The flat terrain level at a map cell — for things that stand on
    the ground at a position we already know. */
 float levelAt(vec2 cell) {
-    vec2 uv = (vec2(cell.x, cell.y + u_pad) + 0.5) / u_texSize;
-    return floor(texture2D(u_height, uv).r * 32.0 + 0.5);
+    return floor(texture2D(u_height, heightUV(cell)).r * 32.0 + 0.5);
 }
 
 /* The stacked layer showing at a SCREEN cell, resolved by pass 2.
@@ -554,10 +567,9 @@ void main() {
     vec2  srcC  = cell - vec2(0.0, me * u_lift);           // ...in screen cells
     float h     = me / LEVELS;
     bool  water = me <= u_sea + 0.5;
-    /* Second, unrelated slice of the same noise field decides
-       where forest grows. Sampled in map space so it stays glued
-       to the terrain while the camera moves. */
-    float forest = vnoise(src * 0.045 + u_seed + 50.0);
+    /* Baked into the height texture's green channel, in map space,
+       so it stays glued to the terrain while the camera moves. */
+    float forest = texture2D(u_height, heightUV(srcC)).g;
 
     vec3 fill = paletteFill(h, forest, water);
 
@@ -627,7 +639,11 @@ void main() {
     vec2  pBody = ps + vec2(0.0, (pl + u_hover) * u_lift);
     float wing;
 
-    if (u_trailMode > 0) {
+    /* The trail never reaches more than about sixty cells behind
+       the plane, or a hundred above and below it once the lift is
+       counted. Everything outside that box can skip twenty texture
+       fetches, which is most of the screen. */
+    if (u_trailMode > 0 && abs(cell.x - pBody.x) < 80.0 && abs(cell.y - pBody.y) < 110.0) {
         for (int i = 0; i < 10; i++) {
             vec3 t = u_trail[i];
             if (t.z <= 0.0) continue;
@@ -665,6 +681,11 @@ void main() {
         }
         if (!hidden) {
             vec2 q = turn(cell - pBody, -u_plane.z) / u_planeSize;
+            /* Banking foreshortens the wings. Dividing the local y
+               by cos(bank) makes the tested shape narrower, which
+               is the same thing seen from the front. The floor
+               stops a hard turn from squashing it to a line. */
+            q.y /= max(0.34, cos(u_bank));
             float pIn, pEdge;
             planeShape(q, pIn, pEdge, wing);
             if (pIn < EPS) {

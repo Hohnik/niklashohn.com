@@ -14,38 +14,13 @@
    Screenshots land in .verify-shots/ (git-ignored).
    ============================================================ */
 import { chromium } from 'playwright';
-import { createServer } from 'node:http';
-import { readFile, mkdir, rm } from 'node:fs/promises';
-import { existsSync } from 'node:fs';
-import { extname, join, normalize } from 'node:path';
+import { mkdir, rm } from 'node:fs/promises';
+import { join } from 'node:path';
+import { startServer } from './static-server.mjs';
 
 const PORT = Number(process.env.PORT || 8743);
-const ROOT = process.cwd();
-const SHOTS = join(ROOT, '.verify-shots');
+const SHOTS = join(process.cwd(), '.verify-shots');
 const KEEP = process.argv.includes('--keep');
-
-const TYPES = {
-  '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css',
-  '.ttf': 'font/ttf', '.png': 'image/png', '.svg': 'image/svg+xml',
-  '.json': 'application/json'
-};
-
-/* A static server small enough to not be a dependency. */
-function serve() {
-  const server = createServer(async (req, res) => {
-    const url = decodeURIComponent(req.url.split('?')[0]);
-    const rel = normalize(url === '/' ? '/index.html' : url).replace(/^(\.\.[/\\])+/, '');
-    const file = join(ROOT, rel);
-    if (!file.startsWith(ROOT) || !existsSync(file)) { res.writeHead(404); return res.end('no'); }
-    try {
-      const body = await readFile(file);
-      res.writeHead(200, { 'content-type': TYPES[extname(file)] || 'application/octet-stream',
-                           'cache-control': 'no-store' });
-      res.end(body);
-    } catch { res.writeHead(500); res.end('err'); }
-  });
-  return new Promise(ok => server.listen(PORT, '127.0.0.1', () => ok(server)));
-}
 
 const failures = [];
 let passes = 0;
@@ -130,7 +105,7 @@ const shot = (page, name) => page.screenshot({ path: join(SHOTS, name + '.png') 
 async function main() {
   await rm(SHOTS, { recursive: true, force: true });
   await mkdir(SHOTS, { recursive: true });
-  const server = process.env.BASE ? null : await serve();
+  const server = process.env.BASE ? null : await startServer(PORT);
 
   const browser = await chromium.launch({
     executablePath: process.env.CHROME_PATH || undefined,
@@ -187,11 +162,13 @@ async function main() {
     await page.waitForTimeout(700);
     const r = await page.evaluate(w => ({
       at: NH.Flight.state.at, open: NH.UI.openId, hash: location.hash,
-      title: (document.querySelector('#doc-' + w + '.on h1') || {}).textContent
+      title: (document.querySelector('#doc-' + w + '.on h1') || {}).textContent,
+      said: document.getElementById('announce').textContent
     }), id);
     check('arrived at ' + id, r.at === id, JSON.stringify(r));
     check(id + ' sheet shown', r.open === id && r.title === heading);
     check(id + ' reflected in the url', r.hash === '#' + id);
+    check(id + ' announced to assistive tech', /Arrived at/.test(r.said), r.said);
     await shot(page, '03-' + id);
   }
 
@@ -199,9 +176,11 @@ async function main() {
     cards: document.querySelectorAll('#proj-list .proj').length,
     source: document.getElementById('proj-source').textContent,
     langs: document.querySelectorAll('#proj-langs button').length,
+    sorts: document.querySelectorAll('#proj-sort button').length,
     html: document.getElementById('proj-list').innerHTML
   }));
   check('project cards rendered', proj.cards === 2, proj.cards + ' cards');
+  check('sort control rendered', proj.sorts === 3, proj.sorts + ' options');
   check('live source used when reachable', /live/.test(proj.source), proj.source);
   check('forks and the profile repo filtered out', !/a-fork|>Hohnik</.test(proj.html));
   check('language filters rendered', proj.langs >= 2, proj.langs + ' chips');
@@ -219,6 +198,19 @@ async function main() {
   check('typing did not eject the plane', filtered.at === 'projects');
   await page.fill('#proj-search', '');
   await page.evaluate(() => document.activeElement.blur());
+
+  await page.click('#proj-sort button[data-sort="name"]');
+  await page.waitForTimeout(300);
+  const sorted = await page.evaluate(() =>
+    Array.from(document.querySelectorAll('.proj-name')).map(e => e.textContent));
+  check('sorting by name reorders the list',
+        sorted.length === 2 && sorted[0] === 'LaRobot', sorted.join(', '));
+  await page.click('#proj-sort button[data-sort="stars"]');
+  await page.waitForTimeout(300);
+  const restar = await page.evaluate(() =>
+    (document.querySelector('.proj-name') || {}).textContent);
+  check('sorting by stars puts the most-starred first',
+        restar === 'noc-examples-pygame', restar);
 
   // ------------------------------------------------------- 5
   section(5, 'steering peels off');
@@ -457,7 +449,8 @@ async function main() {
 
   // ------------------------------------------------------ 10
   section(10, 'layout holds with the dev bar open');
-  for (const [w, h, label] of [[1280, 800, 'desktop'], [1024, 700, 'laptop'], [390, 844, 'phone']]) {
+  for (const [w, h, label] of [[1280, 800, 'desktop'], [1024, 700, 'laptop'],
+                              [390, 844, 'phone'], [320, 568, 'small phone']]) {
     ({ ctx, page } = await open(browser, { viewport: { width: w, height: h } }));
     await page.goto(BASE + '?dev', { waitUntil: 'networkidle' });
     await page.waitForTimeout(3800);
@@ -489,6 +482,16 @@ async function main() {
     await ctx.close();
   }
 
+  section('10b', 'touch devices get touch advice');
+  ({ ctx, page } = await open(browser, {
+    viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true
+  }));
+  await page.goto(BASE, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(1200);
+  const hintText = await page.evaluate(() => document.getElementById('hint').textContent.trim());
+  check('the hint names the touch gesture, not keys', /hold anywhere/.test(hintText), hintText);
+  await ctx.close();
+
   // ------------------------------------------------------ 11
   section(11, 'reduced motion, no-WebGL, resize');
   ({ ctx, page } = await open(browser, { reducedMotion: 'reduce' }));
@@ -513,10 +516,12 @@ async function main() {
     const vis = sel => Array.from(document.querySelectorAll(sel))
       .some(e => getComputedStyle(e).display !== 'none');
     return { keys: vis('.keys'), fly: vis('.quicknav button[data-fly]'),
+             help: vis('.quicknav-help'),
              chip: vis('.devchip'), canvas: vis('#world') };
   });
   check('flight-only chrome is gone without WebGL',
-        !noglChrome.keys && !noglChrome.fly && !noglChrome.chip && !noglChrome.canvas,
+        !noglChrome.keys && !noglChrome.fly && !noglChrome.help &&
+        !noglChrome.chip && !noglChrome.canvas,
         JSON.stringify(noglChrome));
   check('projects still listed', nogl.cards === 2, nogl.cards + ' cards');
   await shot(page, '08-nogl');
@@ -531,6 +536,28 @@ async function main() {
   check('canvas followed the resize', rs.w === Math.ceil(900 / 4), rs.w + ' cells');
   check('still rendering after resize', (await fingerprint(page)).colours > 20);
   check('no errors on resize', page.errors.length === 0, page.errors.join(' | '));
+  await ctx.close();
+
+  section('11b', 'the page survives losing the GPU');
+  ({ ctx, page } = await open(browser));
+  await page.goto(BASE, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(2600);
+  const beforeLoss = (await fingerprint(page)).colours;
+  await page.evaluate(() => {
+    const gl = document.getElementById('world').getContext('webgl');
+    window.__ext = gl.getExtension('WEBGL_lose_context');
+    window.__ext.loseContext();
+  });
+  await page.waitForTimeout(700);
+  check('a lost context stops the renderer instead of throwing',
+        await page.evaluate(() => NH.World.lost === true));
+  await page.evaluate(() => window.__ext.restoreContext());
+  await page.waitForTimeout(2400);
+  const afterLoss = await page.evaluate(() => NH.World.lost);
+  check('the context is rebuilt when it comes back', afterLoss === false);
+  check('and it draws again', (await fingerprint(page)).colours > 20,
+        'was ' + beforeLoss);
+  check('no errors through a context loss', page.errors.length === 0, page.errors.join(' | '));
   await ctx.close();
 
   // ------------------------------------------------------ 12

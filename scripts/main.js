@@ -104,7 +104,7 @@ window.NH = window.NH || {};
     NH.World.render({
       time: now / 1000,
       cam: st.cam,
-      plane: { x: st.pos.x, y: st.pos.y, heading: st.heading },
+      plane: { x: st.pos.x, y: st.pos.y, heading: st.heading, bank: st.bank },
       marks: marks,
       trail: st.trail,
       seed: NH.seed

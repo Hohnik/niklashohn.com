@@ -10,9 +10,32 @@
 <meta property="og:description" content="Fly a paper plane over a WebGL landscape to navigate the site." />
 <meta property="og:type" content="website" />
 <meta property="og:url" content="https://niklashohn.com/" />
+<!-- Rendered from the site itself by tools/og.mjs, so the preview
+     is the real thing rather than a drawing of it. -->
+<meta property="og:image" content="https://niklashohn.com/og.png" />
+<meta property="og:image:width" content="1200" />
+<meta property="og:image:height" content="630" />
+<meta property="og:image:alt" content="A pixel-art contour landscape with a paper plane banking towards a snow-capped beacon." />
+<meta name="twitter:card" content="summary_large_image" />
 <link rel="canonical" href="https://niklashohn.com/" />
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%235b7f9e'/%3E%3Cpath d='M2 8 L13 3 L9 13 L7.5 8.5 Z' fill='%23fbfaf5'/%3E%3C/svg%3E" />
 <link rel="stylesheet" href="styles.css" />
+
+<!-- The page is a canvas with three sheets behind a flight model,
+     which is not something a crawler can read. This says plainly
+     who it belongs to. -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Person",
+  "name": "Niklas Hohn",
+  "alternateName": "Hohnik",
+  "url": "https://niklashohn.com/",
+  "description": "AI student in Moosburg, Germany.",
+  "address": { "@type": "PostalAddress", "addressLocality": "Moosburg", "addressCountry": "DE" },
+  "sameAs": ["https://github.com/Hohnik"]
+}
+</script>
 </head>
 <body>
 
@@ -39,6 +62,9 @@
   <span class="k">&#8592;</span><span class="k">&#8594;</span> steer &middot;
   <span class="k">shift</span> boost &middot; fly to a beacon
 </p>
+
+<!-- Arriving somewhere changes the whole page silently, so say so. -->
+<p id="announce" class="visually-hidden" role="status" aria-live="polite"></p>
 
 <main id="panel" class="panel" hidden>
   <button id="panel-close" class="panel-close" type="button" aria-label="Leave this beacon">&times;</button>
@@ -118,7 +144,8 @@
     <p class="lead">Everything public on GitHub, newest and most-starred first.</p>
     <div class="proj-tools">
       <input id="proj-search" type="search" placeholder="filter&hellip;" aria-label="Filter projects" autocomplete="off" />
-      <div id="proj-langs" class="proj-langs"></div>
+      <div id="proj-langs" class="proj-langs" role="group" aria-label="Filter by language"></div>
+      <div id="proj-sort" class="proj-langs proj-sort" role="group" aria-label="Sort by"></div>
     </div>
     <div id="proj-list" class="proj-list">
       <p class="quiet">Loading&hellip;</p>

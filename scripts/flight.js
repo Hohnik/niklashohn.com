@@ -25,6 +25,7 @@ NH.Flight = (function () {
   const state = {
     pos: { x: 0, y: -323 },
     heading: Math.PI / 2,
+    bank: 0,               // radians of roll, from how hard it is turning
     cam: { x: 0, y: 0 },
     mode: 'fly',           // 'fly' | 'orbit'
     at: null,              // landmark id being orbited
@@ -193,6 +194,7 @@ NH.Flight = (function () {
   }
 
   function update(dt) {
+    const headingWas = state.heading;
     const steer = steerInput();
     const manual = steer !== 0 || (pointerHeld && pointer);
 
@@ -267,6 +269,14 @@ NH.Flight = (function () {
         if (dist < NH.ARRIVE) { arrive(m); break; }
       }
     }
+
+    /* Roll into the turn. A real paper plane banks, and the wing
+       it drops is foreshortened — the shader narrows the shape by
+       cos(bank), which is what sells the turn as a turn rather
+       than a spin on the spot. Smoothed, or it would snap. */
+    const turnRate = dt > 0 ? angleDelta(headingWas, state.heading) / dt : 0;
+    const wantBank = NH.util.clamp(turnRate * 0.45, -1.05, 1.05);
+    state.bank += (wantBank - state.bank) * (1 - Math.exp(-7.0 * dt));
 
     state.heading = (state.heading % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2);
     pushTrail(dt);

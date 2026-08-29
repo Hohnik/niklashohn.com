@@ -28,7 +28,8 @@ NH.GITHUB_USER = 'Hohnik';
    without one simply have none. */
 NH.PROJECTS_STATIC = [
   { name: 'noc-examples-pygame', stars: 16, lang: 'Python', updated: '2026-08-14',
-    desc: '"Nature of Code" examples pygame port' },
+    desc: '"Nature of Code" examples pygame port',
+    topics: ['art', 'creative', 'generative', 'nature', 'pygame'] },
   { name: 'LaRobot', stars: 4, lang: 'Python', updated: '2026-08-28', desc: null },
   { name: 'Room-Availability-HAW-Landshut', stars: 2, lang: 'JavaScript', updated: '2026-08-27', desc: null },
   { name: 'MailChat', stars: 1, lang: 'Python', updated: '2026-08-26',
@@ -37,7 +38,8 @@ NH.PROJECTS_STATIC = [
   { name: 'DiabetesPrediction', stars: 1, lang: 'Jupyter Notebook', updated: '2025-05-26', desc: null },
   { name: 'Grader', stars: 1, lang: 'Python', updated: '2025-03-21', desc: null },
   { name: 'Shorty', stars: 1, lang: 'HTML', updated: '2025-01-22',
-    desc: 'Get a fast overview of shortcuts for (almost) everything.' },
+    desc: 'Get a fast overview of shortcuts for (almost) everything.',
+    topics: ['nvim', 'shortcuts', 'vim'] },
   { name: 'kage_website', stars: 0, lang: null, updated: '2026-08-28',
     desc: 'Recreation of the Kage website with Moosburg as inspiration' },
   { name: 'niklashohn.com', stars: 0, lang: 'JavaScript', updated: '2026-08-25', desc: null },
@@ -69,6 +71,7 @@ NH.PROJECTS_STATIC = [
   { name: 'scheduler', stars: 0, lang: 'Python', updated: '2024-08-04', desc: null }
 ].map(function (p) {
   p.url = 'https://github.com/' + NH.GITHUB_USER + '/' + p.name;
+  p.topics = p.topics || [];
   return p;
 });
 

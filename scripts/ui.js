@@ -13,6 +13,7 @@ NH.UI = (function () {
   const fpsBox = document.getElementById('fps');
   const quicknav = document.getElementById('quicknav');
   const help = document.getElementById('help');
+  const announce = document.getElementById('announce');
 
   const PANEL_SKINS = ['paper', 'card', 'terminal', 'blueprint'];
   const HUD_MODES = ['radar', 'arrows', 'compass', 'off'];
@@ -44,6 +45,9 @@ NH.UI = (function () {
     setHash(id === 'home' ? '' : '#' + id);
     syncNav();
     document.body.classList.add('sheet-open');
+
+    const mark = NH.Flight.markById(id);
+    if (announce && mark) announce.textContent = 'Arrived at ' + mark.name + '.';
   }
 
   function closeSheet() {
@@ -53,6 +57,7 @@ NH.UI = (function () {
     setHash('');
     syncNav();
     document.body.classList.remove('sheet-open');
+    if (announce) announce.textContent = 'Flying.';
   }
 
   /* replaceState instead of location.hash: it updates the address
@@ -145,7 +150,16 @@ NH.UI = (function () {
     if (['ArrowLeft', 'ArrowRight', 'a', 'd', 'A', 'D'].indexOf(e.key) >= 0) dropHint();
   }
 
+  /* The default hint names keys, which is the wrong advice on a
+     phone. Coarse pointer means there is no keyboard to talk
+     about, so say the thing that actually works there. */
+  function tuneHintForTouch() {
+    if (!window.matchMedia || !window.matchMedia('(pointer: coarse)').matches) return;
+    hint.innerHTML = 'hold anywhere to fly &middot; reach a beacon';
+  }
+
   function init() {
+    tuneHintForTouch();
     applyConfig();
     NH.on('config', applyConfig);
 
