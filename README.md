@@ -24,25 +24,39 @@ straight onto the beacon.
 ## Dev mode
 
 Press `~` (or add `?dev` to the URL, or hit the chip in the corner) for a
-bar that swaps out every part of the page while it runs. Left click steps
-forward through a setting, right click steps back. Choices are kept in
+panel that swaps out every part of the page while it runs. Left click steps
+a setting forward, right click steps back. Choices are kept in
 `localStorage`, so a look you like survives a reload.
 
-| Setting | Versions |
-|---|---|
-| Preset | Alpine · Dusk · Sand · Mono · Neon |
-| View | Stacked (fake perspective) · Flat (plain top-down map) |
-| Lift | 1 · 2 · 3 cells of rise per terrain level |
-| Pixel | 3 · 4 · 6 · 8 screen pixels per cell |
-| Plane | Dart · Glider · Delta · Blocky |
-| Control | Glide (steer) · Direct (8-way) · Chase (follows the pointer) |
-| Marker | Flag · Beacon · Monolith |
-| Panel | Paper · Card · Terminal |
-| HUD | Radar · Arrows · Compass · Off |
-| Source | Projects read live from the GitHub API, or the bundled copy |
-| Switches | Ink · Shadow · Trail · Waves · Fog · Occlude · Labels · FPS |
+**World** — Terrain (Rolling · Ridged · Dunes · Islands · Plateaus) ·
+Scale (Near · Mid · Far) · View (Stacked · Flat) · Lift (1 · 2 · 3) ·
+Pixel (3 · 4 · 6 · 8)
 
-Plus **New world** to re-roll the terrain noise, and **Reset**.
+**Look** — Preset (Alpine · Dusk · Sand · Mono · Neon · Blueprint · Autumn) ·
+Ink (Off · Every level · Index contours · Cliffs only) ·
+Light (Flat · Hillshade · Rim) · Water (Still · Drift · Dither) ·
+Clouds · Fog
+
+**Flight** — Plane (Dart · Glider · Delta · Wing · Arrow · Blocky) ·
+Control (Glide · Direct · Chase) · Camera (Centre · Lead · Lazy) ·
+Trail (Off · Dots · Ribbon) · Shadow · Occlude
+
+**Interface** — Marker (Flag · Beacon · Monolith · Ring · Cairn) ·
+Panel (Paper · Card · Terminal · Blueprint) ·
+HUD (Radar · Arrows · Compass · Off) · Source (Live · Static) ·
+Labels · FPS
+
+Twenty-three settings, seventy-six states, on the order of 10¹¹
+combinations. Six named presets — Paper, Topo, Alpine, Dusk, Arcade,
+Draft — bundle the ones worth keeping together, and **Random** rolls the
+lot. **New world** re-seeds the terrain noise without moving the beacons.
+
+**Copy link** puts the whole configuration in a URL — one base-36
+character per setting behind a version digit, so
+`?look=101011011100001110100010` opens the page looking exactly like
+yours. A link written before a feature existed fails its length check and
+is ignored rather than applied to the wrong settings. **Save PNG**
+downloads the current frame, named after the look that produced it.
 
 ## How the landscape is drawn
 
@@ -51,9 +65,9 @@ canvas backing store is `width / pixelSize` across and CSS scales it back
 up by an exact integer factor, so the pixel grid is real rather than
 faked by rounding.
 
-1. **Height.** One fragment per map cell. Four octaves of value noise,
-   stretched with `smoothstep` (raw fbm crowds around the middle and would
-   leave the map flat), quantised into 28 levels, then flooded flat below
+1. **Height.** One fragment per map cell. One of five generators — plain
+   fbm, a ridged multifractal, a domain-warped field, an island mask, or a
+   banded mesa profile — quantised into 28 levels and flooded flat below
    the water line. Each landmark adds a cone that reaches the top level at
    its centre, so every beacon is guaranteed a mountain you can see from
    across the map — and its exact height is known without asking the GPU,
@@ -69,40 +83,70 @@ faked by rounding.
    because the answer is needed three times per pixel — here and at two
    neighbours — to find the contour edges.
 
-3. **Shading.** Palette, contour ink, water drift, landmarks, the plane,
-   its shadow and its vapour trail. The plane is drawn as maths rather
-   than a sprite: two triangles as half-planes, so it turns to any angle
-   for free and still lands on whole cells.
+3. **Shading.** Palette, contour ink, relief shading, water, cloud
+   shadows, landmarks, the plane, its shadow and its trail. The plane is
+   drawn as maths rather than a sprite: two triangles as half-planes, so
+   it turns to any angle for free and still lands on whole cells.
 
 The gap between the plane and its shadow is what reads as altitude, and it
 closes by itself when the plane crosses a peak.
 
+Passes 1 and 2 depend only on where the camera is and how the terrain is
+configured, never on the plane — so they are skipped entirely on any frame
+where none of that changed. That is most of the frame's work saved
+whenever the camera settles, which is exactly when a sheet is open and
+someone is reading.
+
 ## Layout
 
 ```
-index.html          the page: canvas, sheets, HUD, dev bar
+index.html          the page: canvas, sheets, HUD, help, dev bar
 styles.css          everything on top of the canvas
+scripts/util.js     the few helpers more than one file needs
 scripts/shaders.js  the three GLSL passes
 scripts/config.js   the feature registry — the dev bar renders itself from it
 scripts/content.js  landmark positions, bundled project list
 scripts/world.js    the renderer
 scripts/flight.js   flight model, arrival, orbit, camera
 scripts/projects.js the GitHub list, live with a bundled fallback
-scripts/ui.js       sheets, labels, HUD, routing
+scripts/hud.js      labels, radar, arrows, compass
+scripts/ui.js       sheets, help, routing, keyboard
 scripts/devbar.js   the variant switcher
 scripts/main.js     wiring and the frame loop
+tools/verify.mjs    the browser test suite
+tools/serve.mjs     a static server for local work
 legacy/             the previous site (the raven), still runnable
 ```
 
-Static files only — no build step. Anything with a `file://`-hostile
-fetch was avoided on purpose; open `index.html` and it runs.
+The site itself is static files with no build step and no dependencies:
+open `index.html` and it runs, from `file://` as well as from a server.
+`package.json` exists only for the tests.
 
 Adding a new version of something means adding one entry to
-`NH.FEATURES` in `scripts/config.js`. The dev bar, the storage and the
-reset all follow from that.
+`NH.FEATURES` in `scripts/config.js`. The dev bar, the tooltip, the
+storage and the reset all follow from that.
 
 Without WebGL the page falls back to the three sheets stacked and
 scrollable, so the content is never behind the graphics.
+
+## Tests
+
+```
+npm install
+npm test              # npm run test:keep leaves the screenshots behind
+```
+
+`tools/verify.mjs` serves the directory and drives a headless Chromium
+through 83 checks: that the world renders, that flying to a beacon opens
+the right sheet and updates the URL, that typing in the project filter
+does not steer the plane, that **every** variant of every feature compiles,
+draws something, and draws something *different* from its neighbours, that
+the layout holds at three viewport sizes with the dev bar open, that
+choices survive a reload, that the no-WebGL and reduced-motion paths still
+give you the content, that a shared look link restores the look and a
+malformed one is refused, and that the terrain passes really are skipped
+once the camera settles. It runs on every push
+(`.github/workflows/verify.yml`) and uploads the screenshots when it fails.
 
 ## Ideas still on the list
 

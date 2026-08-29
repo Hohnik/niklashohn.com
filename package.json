@@ -1,0 +1,16 @@
+{
+  "name": "niklashohn.com",
+  "private": true,
+  "description": "A portfolio you fly through: one WebGL landscape, navigated by steering a paper plane to its beacons.",
+  "homepage": "https://niklashohn.com",
+  "license": "MIT",
+  "scripts": {
+    "start": "node tools/serve.mjs",
+    "test": "node tools/verify.mjs",
+    "test:keep": "node tools/verify.mjs --keep"
+  },
+  "devDependencies": {
+    "playwright": "^1.56.1"
+  },
+  "engines": { "node": ">=18" }
+}

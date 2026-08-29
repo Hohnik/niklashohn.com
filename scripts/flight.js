@@ -20,6 +20,7 @@ NH.Flight = (function () {
   const ORBIT_W = 0.6;     // radians per second around a landmark
   const TRAIL_EVERY = 0.055;
   const RANGE = 1200;      // beyond this the map gently steers you back
+  const LOOK_AHEAD = 58;   // cells the 'lead' camera runs in front of the nose
 
   const state = {
     pos: { x: 0, y: -323 },
@@ -44,20 +45,8 @@ NH.Flight = (function () {
     return null;
   }
 
-  /* Shortest signed way round from a to b. */
-  function angleDelta(a, b) {
-    let d = (b - a) % (Math.PI * 2);
-    if (d > Math.PI) d -= Math.PI * 2;
-    if (d < -Math.PI) d += Math.PI * 2;
-    return d;
-  }
-
-  function typing() {
-    const el = document.activeElement;
-    if (!el) return false;
-    const tag = el.tagName;
-    return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el.isContentEditable;
-  }
+  const angleDelta = NH.util.angleDelta;
+  const typing = NH.util.typing;
 
   /* -1 = right, +1 = left, 0 = none. */
   function steerInput() {
@@ -108,7 +97,24 @@ NH.Flight = (function () {
     /* Mid-height terrain is the common case, so leaning the
        camera by that much keeps the plane near the middle of the
        screen instead of riding the top edge. */
-    return { x: state.pos.x - c.w / 2, y: state.pos.y - c.h / 2 + (14 + NH.HOVER) * L };
+    let ax = 0, ay = 0;
+    if (NH.cfg.get('camera') === 'lead') {
+      /* Look where you are going: push the view ahead along the
+         heading so there is more map in front of the nose than
+         behind the tail. */
+      ax = Math.cos(state.heading) * LOOK_AHEAD;
+      ay = Math.sin(state.heading) * LOOK_AHEAD;
+    }
+    return {
+      x: state.pos.x - c.w / 2 + ax,
+      y: state.pos.y - c.h / 2 + (14 + NH.HOVER) * L + ay
+    };
+  }
+
+  /* How hard the camera chases its target, per control mode. */
+  function camStiffness() {
+    if (state.mode === 'orbit') return 3.2;
+    return NH.cfg.get('camera') === 'lazy' ? 2.4 : 6.5;
   }
 
   function pushTrail(dt) {
@@ -269,7 +275,7 @@ NH.Flight = (function () {
     if (!state.camReady) {
       state.cam.x = t.x; state.cam.y = t.y; state.camReady = true;
     } else {
-      const k = 1 - Math.exp(-(state.mode === 'orbit' ? 3.2 : 6.5) * dt);
+      const k = 1 - Math.exp(-camStiffness() * dt);
       state.cam.x += (t.x - state.cam.x) * k;
       state.cam.y += (t.y - state.cam.y) * k;
     }

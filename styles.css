@@ -62,11 +62,35 @@ body {
   z-index: 0;
 }
 
+/* ---------------------------------------------------------
+   No WebGL: the page keeps its words and drops the flying.
+   --------------------------------------------------------- */
 .glfail {
-  position: fixed; inset: 0; z-index: 1;
-  display: grid; place-items: center; padding: 2rem;
+  padding: 2.5rem 2rem 2rem;
   background: #24303c; color: #dfe6ec; text-align: center;
 }
+body.no-gl {
+  overflow: auto;
+  background: #24303c;
+}
+body.no-gl #world,
+body.no-gl .hud,
+body.no-gl .hint,
+body.no-gl .devchip,
+body.no-gl #labels,
+body.no-gl .panel-close,
+body.no-gl .quicknav button[data-fly],
+body.no-gl [data-gl-only] { display: none; }
+body.no-gl .panel {
+  position: static;
+  transform: none;
+  width: min(34rem, 92vw);
+  max-height: none;
+  margin: 2rem auto 5rem;
+  animation: none;
+}
+body.no-gl .doc + .doc { margin-top: 3rem; padding-top: 2rem; border-top: 1px solid var(--paper-edge); }
+body.no-gl .quicknav { position: static; margin: 0 auto 2rem; width: max-content; }
 
 .layer { position: fixed; inset: 0; z-index: 2; pointer-events: none; }
 
@@ -123,7 +147,7 @@ body.hud-compass #compass { display: block; }
   opacity: .95;
   filter: drop-shadow(0 4px 14px rgba(0, 0, 0, .35));
 }
-body.dev-on #radar { top: calc(var(--gap) + 4.4rem); }
+body.dev-on #radar { top: calc(var(--gap) + var(--devbar-h, 0px) + .5rem); }
 
 .arrows { position: absolute; inset: 0; }
 .arrow {
@@ -268,6 +292,19 @@ body.hud-compass .hint { bottom: calc(var(--gap) + 5.9rem); }
   @keyframes sheet-in { from { opacity: 0; transform: translateY(18px); } }
 }
 
+/* With the dev bar open the sheet has to fit under it. The bar
+   measures itself and publishes --devbar-h, so this holds however
+   many rows it wrapped into. */
+body.dev-on .panel {
+  top: calc(50% + var(--devbar-h, 0px) / 2);
+  /* Leave room for the quick nav underneath as well as the bar
+     above, or the last line of the sheet ends up behind it. */
+  max-height: calc(100vh - var(--devbar-h, 0px) - 9rem);
+}
+/* The flying hint is one more floating pill in a view that now has
+   plenty; dev mode implies you found the controls. */
+body.dev-on .hint { display: none; }
+
 .doc { display: none; }
 .doc.on { display: block; }
 
@@ -370,6 +407,26 @@ body.panel-terminal .panel .k, body.panel-terminal .panel-close {
 body.panel-terminal .eyebrow { color: #86f0a8; }
 body.panel-terminal .chips span { border-color: #2e7f4c; }
 
+/* -- skin: blueprint -- */
+body.panel-blueprint .panel {
+  background: #0a2340;
+  color: #cfe6ff;
+  border: 1px solid #2f6ea8;
+  border-radius: .2rem;
+  box-shadow: 0 22px 55px rgba(0, 0, 0, .5);
+  /* Drafting grid, drawn with two crossed repeating gradients. */
+  background-image:
+    repeating-linear-gradient(0deg, rgba(143, 211, 255, .10) 0 1px, transparent 1px 1.5rem),
+    repeating-linear-gradient(90deg, rgba(143, 211, 255, .10) 0 1px, transparent 1px 1.5rem);
+}
+body.panel-blueprint .panel h1 { color: #eaf5ff; }
+body.panel-blueprint .panel h2 { color: #8fd3ff; opacity: .85; }
+body.panel-blueprint .eyebrow { color: #ffd166; opacity: .95; }
+body.panel-blueprint .panel .k, body.panel-blueprint .panel-close {
+  background: rgba(143, 211, 255, .14); border-color: rgba(143, 211, 255, .32);
+}
+body.panel-blueprint .chips span { border-color: #3f7fb8; }
+
 /* ---------------------------------------------------------
    Projects list
    --------------------------------------------------------- */
@@ -409,8 +466,10 @@ body.panel-terminal .chips span { border-color: #2e7f4c; }
 .dot { width: .55em; height: .55em; border-radius: 50%; display: inline-block; background: #888; }
 
 /* ---------------------------------------------------------
-   Dev mode. One row per feature group, rendered from the
-   registry in config.js.
+   Dev mode. One cluster per feature group, all of it rendered
+   from the registry in config.js. Twenty-three controls do not
+   fit on one line at any sane width, so the bar is a panel that
+   wraps rather than a pill that scrolls.
    --------------------------------------------------------- */
 .devchip {
   position: fixed; right: var(--gap); bottom: var(--gap); z-index: 7;
@@ -428,34 +487,69 @@ body.dev-on .devchip { color: #16150f; background: #f4f1e6; border-color: transp
   position: fixed; top: var(--gap); left: 50%;
   transform: translateX(-50%);
   z-index: 7;
-  max-width: calc(100vw - 2 * var(--gap));
-  display: flex; align-items: stretch; gap: .1rem;
-  padding: .45rem .6rem;
-  border-radius: 1.15rem;
+  width: min(74rem, calc(100vw - 2 * var(--gap)));
+  max-height: calc(100vh - 2 * var(--gap));
+  overflow-y: auto;
+  padding: .7rem .85rem .6rem;
+  border-radius: 1rem;
   background: var(--glass);
   border: 1px solid var(--glass-line);
-  backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
-  box-shadow: 0 10px 34px rgba(0, 0, 0, .38);
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-.devbar::-webkit-scrollbar { display: none; }
-.devbar hr {
-  width: 1px; border: 0; margin: .35rem .4rem;
-  background: var(--glass-line); flex: 0 0 auto;
+  backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, .42);
+  color: var(--glass-text);
 }
 
+.devbar-head {
+  display: flex; align-items: center; gap: .5rem; flex-wrap: wrap;
+  padding-bottom: .55rem;
+  border-bottom: 1px solid var(--glass-line);
+}
+.devbar-title {
+  font-family: var(--display); font-size: .9rem; font-weight: 600;
+  letter-spacing: .06em; margin-right: .2rem;
+}
+.devbar-presets { display: flex; gap: .2rem; flex-wrap: wrap; flex: 1 1 auto; }
+.devbar-actions { display: flex; gap: .2rem; flex-wrap: wrap; }
+
+.dev-preset, .dev-action {
+  font: inherit; font-size: .64rem;
+  letter-spacing: .06em;
+  padding: .28rem .6rem; border-radius: 999px; cursor: pointer;
+  border: 1px solid var(--glass-line);
+  background: transparent; color: var(--glass-dim);
+  transition: background .14s, color .14s;
+}
+.dev-preset:hover, .dev-action:hover { background: rgba(255, 255, 255, .16); color: #fff; }
+.dev-action { border-color: transparent; background: rgba(255, 255, 255, .08); }
+
+.devbar-groups {
+  display: flex; flex-wrap: wrap; gap: .1rem .35rem;
+  padding-top: .5rem;
+}
+.dev-group {
+  display: flex; flex-direction: column; gap: .25rem;
+  padding: .2rem .5rem .3rem;
+  border-left: 1px solid var(--glass-line);
+}
+.dev-group:first-child { border-left: 0; }
+.dev-group h4 {
+  font-size: .5rem; font-weight: 600;
+  letter-spacing: .2em; text-transform: uppercase;
+  color: var(--glass-dim); opacity: .8;
+}
+.dev-row { display: flex; flex-wrap: wrap; gap: .1rem .25rem; align-items: flex-end; }
+
 .dev-item {
-  display: flex; flex-direction: column; align-items: center; gap: .22rem;
-  padding: 0 .18rem; flex: 0 0 auto;
+  display: flex; flex-direction: column; align-items: center; gap: .2rem;
+  flex: 0 0 auto;
 }
 .dev-item > label {
-  font-size: .52rem; letter-spacing: .16em; text-transform: uppercase;
+  font-size: .5rem; letter-spacing: .14em; text-transform: uppercase;
   color: var(--glass-dim); white-space: nowrap;
 }
 .dev-cycle {
-  font: inherit; font-size: .72rem;
-  min-width: 4.4rem; padding: .3rem .7rem;
+  font: inherit; font-size: .7rem;
+  min-width: 4.6rem; padding: .28rem .6rem;
   border-radius: 999px; cursor: pointer;
   background: rgba(255, 255, 255, .1);
   border: 1px solid transparent;
@@ -468,31 +562,74 @@ body.dev-on .devchip { color: #16150f; background: #f4f1e6; border-color: transp
 
 .dev-toggle {
   position: relative;
-  width: 2.35rem; height: 1.24rem;
+  width: 2.2rem; height: 1.18rem;
   border: 0; border-radius: 999px; cursor: pointer;
   background: rgba(255, 255, 255, .16);
   transition: background .16s;
 }
 .dev-toggle::after {
-  content: ''; position: absolute; top: .17rem; left: .17rem;
-  width: .9rem; height: .9rem; border-radius: 50%;
+  content: ''; position: absolute; top: .16rem; left: .16rem;
+  width: .86rem; height: .86rem; border-radius: 50%;
   background: #b9b7b2;
   transition: transform .16s, background .16s;
 }
 .dev-toggle[aria-pressed='true'] { background: #f4f1e6; }
-.dev-toggle[aria-pressed='true']::after { transform: translateX(1.11rem); background: #16150f; }
+.dev-toggle[aria-pressed='true']::after { transform: translateX(1.02rem); background: #16150f; }
 
-.dev-actions { display: flex; flex-direction: column; gap: .22rem; justify-content: flex-end; }
-.dev-actions button {
-  font: inherit; font-size: .58rem;
-  letter-spacing: .1em; text-transform: uppercase;
-  padding: .22rem .55rem; border-radius: .45rem; cursor: pointer;
-  background: rgba(255, 255, 255, .1); color: var(--glass-text); border: 0;
+.devbar-foot {
+  margin-top: .5rem; padding-top: .45rem;
+  border-top: 1px solid var(--glass-line);
+  font-size: .58rem; color: var(--glass-dim); opacity: .8;
 }
-.dev-actions button:hover { background: rgba(255, 255, 255, .22); }
+
+/* ---------------------------------------------------------
+   Help overlay
+   --------------------------------------------------------- */
+.help {
+  position: fixed; inset: 0; z-index: 8;
+  display: grid; place-items: center;
+  padding: var(--gap);
+  background: rgba(8, 8, 10, .55);
+  backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px);
+}
+.help-card {
+  width: min(26rem, 100%);
+  max-height: 86vh; overflow-y: auto;
+  padding: 1.4rem 1.5rem 1.2rem;
+  border-radius: .6rem;
+  background: var(--paper); color: var(--ink);
+  border: 1px solid var(--paper-edge);
+  box-shadow: 8px 8px 0 rgba(20, 18, 12, .18), 0 20px 50px rgba(0, 0, 0, .35);
+}
+.help-card h2 {
+  font-family: var(--display); font-size: 1.5rem; font-weight: 700;
+  margin-bottom: .8rem;
+}
+.help-card dl {
+  display: grid; grid-template-columns: auto 1fr;
+  gap: .45rem .9rem; align-items: baseline;
+  font-size: .78rem;
+}
+.help-card dt { white-space: nowrap; font-size: .7rem; opacity: .9; }
+.help-card dd { opacity: .78; }
+.help-card .k { background: rgba(0, 0, 0, .07); border-color: rgba(0, 0, 0, .14); }
+.help-close {
+  margin-top: 1.1rem; width: 100%;
+  font: inherit; font-size: .74rem;
+  padding: .5rem; border-radius: .35rem; cursor: pointer;
+  border: 1px solid rgba(0, 0, 0, .18); background: transparent; color: inherit;
+}
+.help-close:hover { background: rgba(0, 0, 0, .07); }
+
+.quicknav-help {
+  min-width: 1.9rem;
+  font-weight: 700;
+}
 
 @media (max-width: 52rem) {
-  .devbar { justify-content: flex-start; border-radius: .9rem; }
+  .devbar { border-radius: .8rem; padding: .55rem .6rem; }
+  .dev-group { border-left: 0; padding-left: .25rem; padding-right: .25rem; }
+  .dev-cycle { min-width: 3.9rem; font-size: .66rem; }
   #radar { width: 108px; height: 108px; }
   .hint { font-size: .66rem; }
 }
@@ -501,6 +638,16 @@ body.dev-on .devchip { color: #16150f; background: #f4f1e6; border-color: transp
    top edge, so there is nowhere left for the radar to live. */
 @media (max-width: 40rem) {
   body.sheet-open #radar, body.dev-on #radar { display: none; }
+  /* Twenty-three controls on a 390px screen would swallow the
+     whole page, so the bar takes a fixed share and scrolls
+     inside itself; the sheet gets whatever is left below it.
+     This has to come after the panel's own media block to win
+     on source order — both selectors weigh the same. */
+  .devbar { max-height: 46vh; }
+  body.dev-on .panel {
+    top: auto;
+    max-height: calc(100vh - var(--devbar-h, 0px) - 5rem);
+  }
   /* The quick nav needs the whole width down there, so the dev
      chip moves up out of its way instead of sitting on the
      GitHub link. */

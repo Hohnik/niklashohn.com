@@ -9,6 +9,9 @@
    ============================================================ */
 window.NH = window.NH || {};
 
+NH.HOVER = 7;         // levels the plane flies above the ground
+NH.PLANE_SIZE = 7.2;  // half-length of the plane, in cells
+
 NH.World = (function () {
   let gl = null, canvas = null;
   let heightProg = null, visProg = null, mainProg = null;
@@ -17,6 +20,15 @@ NH.World = (function () {
   let cellW = 0, cellH = 0, texW = 0, texH = 0, pixel = 0, pad = 0;
   let hU = {}, vU = {}, mU = {}, trailU = [];
   let failure = null;
+
+  /* Passes 1 and 2 only depend on where the camera is and how the
+     terrain is configured — never on the plane. Whenever none of
+     that changed since the last frame the two textures are still
+     valid, so they are simply not redrawn. That is most of the
+     frame's work skipped every time the camera settles, which is
+     exactly when a sheet is open and someone is reading. */
+  let terrainKey = null;
+  let passesSkipped = 0, passesRun = 0;
 
   const TRAIL_SLOTS = 10;
 
@@ -80,13 +92,13 @@ NH.World = (function () {
     gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
 
     hU = uniforms(heightProg, ['u_texSize', 'u_cam', 'u_pad', 'u_seed', 'u_scale',
-      'u_water', 'u_m0', 'u_m1', 'u_m2', 'u_markR']);
+      'u_sea', 'u_terrain', 'u_m0', 'u_m1', 'u_m2', 'u_markR']);
     vU = uniforms(visProg, ['u_height', 'u_texSize', 'u_pad', 'u_lift']);
-    mU = uniforms(mainProg, ['u_height', 'u_visible', 'u_texSize', 'u_res', 'u_cam', 'u_pad', 'u_lift',
-      'u_water', 'u_seed', 'u_ink', 'u_palette', 'u_fog', 'u_waves', 'u_time',
-      'u_plane', 'u_hover',
-      'u_planeSize', 'u_planeKind', 'u_planeOn', 'u_shadowOn', 'u_occlude',
-      'u_m0', 'u_m1', 'u_m2', 'u_markStyle', 'u_trailOn']);
+    mU = uniforms(mainProg, ['u_height', 'u_visible', 'u_texSize', 'u_res', 'u_cam', 'u_pad',
+      'u_lift', 'u_sea', 'u_seed', 'u_time', 'u_palette', 'u_inkMode', 'u_light',
+      'u_waterStyle', 'u_clouds', 'u_fog', 'u_plane', 'u_hover', 'u_planeSize',
+      'u_planeKind', 'u_planeOn', 'u_shadowOn', 'u_occlude',
+      'u_m0', 'u_m1', 'u_m2', 'u_markStyle', 'u_trailMode']);
     trailU = [];
     for (let i = 0; i < TRAIL_SLOTS; i++) {
       trailU.push(gl.getUniformLocation(mainProg, 'u_trail[' + i + ']'));
@@ -123,6 +135,8 @@ NH.World = (function () {
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
   }
 
+  function liftNow() { return NH.cfg.get('view') === 'flat' ? 0 : NH.cfg.get('lift'); }
+
   /* Size the canvas in cells and give it an exact integer CSS
      scale, so the pixel grid never lands on a half pixel. */
   function resize() {
@@ -131,7 +145,8 @@ NH.World = (function () {
     /* The height texture only has to reach as far below the screen
        as the layer search actually looks, which is LEVELS * lift
        rows — not the worst case for the steepest lift setting. */
-    pad = NH.LEVELS * (NH.cfg.get('view') === 'flat' ? 0 : NH.cfg.get('lift'));
+    pad = NH.LEVELS * liftNow();
+
     cellW = Math.max(2, Math.ceil(window.innerWidth / pixel));
     cellH = Math.max(2, Math.ceil(window.innerHeight / pixel));
 
@@ -148,47 +163,66 @@ NH.World = (function () {
     texH = cellH + pad;
     attach(heightFbo, heightTex, texW, texH);
     attach(visFbo, visTex, cellW, cellH);
+    terrainKey = null;          // the textures are blank again
   }
 
-  function markUniform(loc, mark) {
+  /* The height pass only asks whether a landmark exists, never how
+     brightly it is pulsing. Feeding it the pulse would change the
+     cache key sixty times a second and defeat the whole thing. */
+  function markStatic(loc, mark) {
+    gl.uniform3f(loc, mark ? mark.x : 0, mark ? mark.y : 0, mark ? 1 : -1);
+  }
+  function markLive(loc, mark) {
     if (!mark) { gl.uniform3f(loc, 0, 0, -1); return; }
     gl.uniform3f(loc, mark.x, mark.y, mark.glow === undefined ? 0 : mark.glow);
   }
 
   function render(s) {
     if (!gl) return;
-    const lift = NH.cfg.get('view') === 'flat' ? 0 : NH.cfg.get('lift');
+    const lift = liftNow();
     /* The camera lands on whole cells. A fractional camera would
        make the entire terrain shimmer as it slid between cells. */
     const camX = Math.round(s.cam.x), camY = Math.round(s.cam.y);
 
-    // ---- pass 1: the height field ----
-    gl.bindFramebuffer(gl.FRAMEBUFFER, heightFbo);
-    gl.viewport(0, 0, texW, texH);
-    gl.useProgram(heightProg);
-    gl.uniform2f(hU.u_texSize, texW, texH);
-    gl.uniform2f(hU.u_cam, camX, camY);
-    gl.uniform1f(hU.u_pad, pad);
-    gl.uniform2f(hU.u_seed, s.seed.x, s.seed.y);
-    gl.uniform1f(hU.u_scale, NH.WORLD_SCALE);
-    gl.uniform1f(hU.u_water, NH.WATER);
-    gl.uniform1f(hU.u_markR, NH.MARK_RADIUS);
-    markUniform(hU.u_m0, s.marks[0]);
-    markUniform(hU.u_m1, s.marks[1]);
-    markUniform(hU.u_m2, s.marks[2]);
-    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    const key = [camX, camY, s.seed.x, s.seed.y, NH.cfg.get('scale'),
+      NH.cfg.get('terrain'), lift, cellW, cellH,
+      s.marks.map(function (m) { return m ? 1 : 0; }).join('')].join('|');
 
-    // ---- pass 2: resolve the visible layer, once per cell ----
-    gl.bindFramebuffer(gl.FRAMEBUFFER, visFbo);
-    gl.viewport(0, 0, cellW, cellH);
-    gl.useProgram(visProg);
-    gl.activeTexture(gl.TEXTURE0);
-    gl.bindTexture(gl.TEXTURE_2D, heightTex);
-    gl.uniform1i(vU.u_height, 0);
-    gl.uniform2f(vU.u_texSize, texW, texH);
-    gl.uniform1f(vU.u_pad, pad);
-    gl.uniform1f(vU.u_lift, lift);
-    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    if (key !== terrainKey) {
+      terrainKey = key;
+      passesRun++;
+
+      // ---- pass 1: the height field ----
+      gl.bindFramebuffer(gl.FRAMEBUFFER, heightFbo);
+      gl.viewport(0, 0, texW, texH);
+      gl.useProgram(heightProg);
+      gl.uniform2f(hU.u_texSize, texW, texH);
+      gl.uniform2f(hU.u_cam, camX, camY);
+      gl.uniform1f(hU.u_pad, pad);
+      gl.uniform2f(hU.u_seed, s.seed.x, s.seed.y);
+      gl.uniform1f(hU.u_scale, NH.cfg.get('scale'));
+      gl.uniform1f(hU.u_sea, NH.SEA);
+      gl.uniform1i(hU.u_terrain, NH.cfg.get('terrain'));
+      gl.uniform1f(hU.u_markR, NH.MARK_RADIUS);
+      markStatic(hU.u_m0, s.marks[0]);
+      markStatic(hU.u_m1, s.marks[1]);
+      markStatic(hU.u_m2, s.marks[2]);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+      // ---- pass 2: resolve the visible layer, once per cell ----
+      gl.bindFramebuffer(gl.FRAMEBUFFER, visFbo);
+      gl.viewport(0, 0, cellW, cellH);
+      gl.useProgram(visProg);
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, heightTex);
+      gl.uniform1i(vU.u_height, 0);
+      gl.uniform2f(vU.u_texSize, texW, texH);
+      gl.uniform1f(vU.u_pad, pad);
+      gl.uniform1f(vU.u_lift, lift);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+    } else {
+      passesSkipped++;
+    }
 
     // ---- pass 3: the picture ----
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
@@ -205,13 +239,15 @@ NH.World = (function () {
     gl.uniform2f(mU.u_cam, camX, camY);
     gl.uniform1f(mU.u_pad, pad);
     gl.uniform1f(mU.u_lift, lift);
-    gl.uniform1f(mU.u_water, NH.WATER);
+    gl.uniform1f(mU.u_sea, NH.SEA);
     gl.uniform2f(mU.u_seed, s.seed.x, s.seed.y);
-    gl.uniform1f(mU.u_ink, NH.cfg.get('ink') ? 1 : 0);
-    gl.uniform1i(mU.u_palette, NH.cfg.get('palette'));
-    gl.uniform1f(mU.u_fog, NH.cfg.get('fog') ? 1 : 0);
-    gl.uniform1f(mU.u_waves, NH.cfg.get('waves') ? 1 : 0);
     gl.uniform1f(mU.u_time, s.time);
+    gl.uniform1i(mU.u_palette, NH.cfg.get('palette'));
+    gl.uniform1i(mU.u_inkMode, NH.cfg.get('ink'));
+    gl.uniform1i(mU.u_light, NH.cfg.get('light'));
+    gl.uniform1i(mU.u_waterStyle, NH.cfg.get('water'));
+    gl.uniform1f(mU.u_clouds, NH.cfg.get('clouds') ? 1 : 0);
+    gl.uniform1f(mU.u_fog, NH.cfg.get('fog') ? 1 : 0);
     gl.uniform3f(mU.u_plane, s.plane.x, s.plane.y, s.plane.heading);
     gl.uniform1f(mU.u_hover, NH.HOVER);
     gl.uniform1f(mU.u_planeSize, NH.PLANE_SIZE);
@@ -219,14 +255,14 @@ NH.World = (function () {
     gl.uniform1f(mU.u_planeOn, 1);
     gl.uniform1f(mU.u_shadowOn, (NH.cfg.get('shadow') && lift > 0) ? 1 : 0);
     gl.uniform1f(mU.u_occlude, NH.cfg.get('occlude') ? 1 : 0);
-    markUniform(mU.u_m0, s.marks[0]);
-    markUniform(mU.u_m1, s.marks[1]);
-    markUniform(mU.u_m2, s.marks[2]);
+    markLive(mU.u_m0, s.marks[0]);
+    markLive(mU.u_m1, s.marks[1]);
+    markLive(mU.u_m2, s.marks[2]);
     gl.uniform1i(mU.u_markStyle, NH.cfg.get('marker'));
 
-    const trailOn = NH.cfg.get('trail');
-    gl.uniform1f(mU.u_trailOn, trailOn ? 1 : 0);
-    if (trailOn) {
+    const trailMode = NH.cfg.get('trail');
+    gl.uniform1i(mU.u_trailMode, trailMode);
+    if (trailMode > 0) {
       for (let i = 0; i < TRAIL_SLOTS; i++) {
         const t = s.trail[i];
         if (t) gl.uniform3f(trailU[i], t.x, t.y, t.life);
@@ -240,15 +276,14 @@ NH.World = (function () {
     init: init,
     resize: resize,
     render: render,
+    /* Force the terrain passes to run on the next frame. Anything
+       that changes what they draw without changing the cache key
+       has to call this — in practice only a reseed. */
+    invalidate: function () { terrainKey = null; },
     get trailSlots() { return TRAIL_SLOTS; },
     get cells() { return { w: cellW, h: cellH, pixel: pixel }; },
+    get stats() { return { passesRun: passesRun, passesSkipped: passesSkipped }; },
     get error() { return failure; },
     get ok() { return !!gl; }
   };
 })();
-
-/* Shared world constants used by both the renderer and the flight
-   model. Kept here so the numbers only exist once. */
-NH.WORLD_SCALE = 1 / 260;   // world cells -> noise space
-NH.HOVER = 7;               // levels the plane flies above the ground
-NH.PLANE_SIZE = 7.2;        // half-length of the plane, in cells

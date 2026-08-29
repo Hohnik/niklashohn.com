@@ -102,11 +102,7 @@ NH.Projects = (function () {
     });
   }
 
-  function esc(s) {
-    return String(s).replace(/[&<>"]/g, function (c) {
-      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
-    });
-  }
+  const esc = NH.util.escapeHtml;
 
   function renderList() {
     const box = document.getElementById('proj-list');

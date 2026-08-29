@@ -12,10 +12,16 @@ window.NH = window.NH || {};
   NH.seed = { x: 41.7, y: 13.2 };
   NH.newWorld = function () {
     NH.seed = { x: Math.random() * 900, y: Math.random() * 900 };
+    NH.World.invalidate();
   };
 
   if (!NH.World.init(canvas)) {
-    canvas.hidden = true;
+    /* No map means nothing to fly, so the page becomes what it
+       would have been without the idea: the three sheets, stacked
+       and scrollable. Everything that only makes sense with a
+       plane in the air is hidden by the no-gl class in the CSS
+       rather than by poking inline styles from here. */
+    document.body.classList.add('no-gl', 'panel-paper');
     const fail = document.getElementById('glfail');
     fail.hidden = false;
     if (NH.World.error) {
@@ -24,25 +30,38 @@ window.NH = window.NH || {};
       p.textContent = NH.World.error;
       fail.appendChild(p);
     }
-    /* Without the map there is nothing to fly, so fall back to a
-       plain page: show every sheet, stacked and scrollable. */
-    document.body.style.overflow = 'auto';
-    document.getElementById('hint').hidden = true;
     document.getElementById('panel').hidden = false;
-    document.getElementById('panel').style.position = 'static';
-    document.getElementById('panel').style.transform = 'none';
-    document.getElementById('panel').style.maxHeight = 'none';
-    document.getElementById('panel').style.width = 'min(34rem, 92vw)';
-    document.getElementById('panel').style.margin = '2rem auto';
-    document.getElementById('panel-close').hidden = true;
     NH.MARKS.forEach(function (m) {
       const d = document.getElementById('doc-' + m.id);
       if (d) d.classList.add('on');
     });
-    document.body.classList.add('panel-paper');
     NH.Projects.init();
     NH.Projects.refresh();
     return;
+  }
+
+  /* A ?look=... link opens the page with someone else's settings.
+     It is applied after the stored ones so the link wins, and it
+     is only trusted if it decodes cleanly against the current
+     registry. */
+  const look = new URLSearchParams(location.search).get('look');
+  if (look) NH.cfg.decode(look);
+
+  /* Saving the canvas has to happen in the same task as the draw:
+     the drawing buffer is not preserved, so by the next tick it is
+     already gone. The flag is read at the bottom of the frame. */
+  let captureWanted = false;
+  NH.capture = function () { captureWanted = true; };
+  function runCapture() {
+    captureWanted = false;
+    let url;
+    try { url = canvas.toDataURL('image/png'); } catch (e) { return; }
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'niklashohn-' + NH.cfg.encode() + '.png';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
   }
 
   NH.Flight.bind(canvas);
@@ -91,6 +110,7 @@ window.NH = window.NH || {};
       seed: NH.seed
     });
     NH.UI.frame(dt);
+    if (captureWanted) runCapture();
 
     requestAnimationFrame(frame);
   }

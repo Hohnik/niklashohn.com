@@ -51,14 +51,16 @@
     <p>You are looking at a landscape that does not exist anywhere — it is a noise function,
        cut into 28 levels, with every level drawn a little higher than the one below it.
        The paper plane is how you get around: there is nothing to click.</p>
-    <ul class="keys">
+    <ul class="keys" data-gl-only>
       <li><span class="k">&#8592;</span> <span class="k">&#8594;</span> or <span class="k">A</span> <span class="k">D</span> — steer</li>
       <li><span class="k">shift</span> or <span class="k">W</span> — boost</li>
       <li><span class="k">1</span> <span class="k">2</span> <span class="k">3</span> — autopilot to a beacon</li>
       <li><span class="k">esc</span> — peel off</li>
       <li><span class="k">~</span> — dev mode: swap out every part of this page</li>
+      <li><span class="k">?</span> — the full list of keys</li>
     </ul>
-    <p class="quiet">On a phone: hold a finger anywhere and the plane flies to it.</p>
+    <p class="quiet" data-gl-only>On a phone: hold a finger anywhere and the plane flies to it.
+       Press <span class="k">?</span> any time for this list.</p>
   </section>
 
   <!-- ----------------------------------------------- ABOUT -->
@@ -90,11 +92,18 @@
     </p>
 
     <h2>How this page works</h2>
-    <p>One WebGL shader draws the whole world twice per frame. The first pass writes the
-       terrain height of every cell into a texture; the second asks, for each pixel,
-       <em>which layer lands on me?</em> — searching from the top level down, because a
-       fragment shader can colour itself but cannot move itself. The first hit wins, and
-       that is the entire fake perspective. Press <span class="k">~</span> to pull it apart.</p>
+    <p>Three shader passes draw the world, all at <em>cell</em> resolution — the canvas is a
+       quarter the width of the window and CSS scales it back up, so the pixel grid is real
+       rather than rounded.</p>
+    <p>The first pass writes the terrain height of every cell into a texture. The second asks,
+       for each pixel, <em>which layer lands on me?</em> — searching from the top level down,
+       because a fragment shader can colour itself but cannot move itself. The first hit wins,
+       and that is the entire fake perspective. The third does the colour, the contour ink, the
+       relief shading and the plane — which is drawn as two triangles of half-planes rather
+       than a sprite, so it turns to any angle for free.</p>
+    <p>Press <span class="k">~</span> to pull it apart: five terrain generators, seven palettes,
+       four contour styles, three lighting models, six plane shapes — twenty-three settings
+       in all, and the six named presets are just bundles of them.</p>
 
     <p class="links">
       <a href="https://github.com/Hohnik" target="_blank" rel="noopener">github.com/Hohnik</a>
@@ -123,7 +132,27 @@
   <button type="button" data-fly="about">About</button>
   <button type="button" data-fly="projects">Projects</button>
   <a href="https://github.com/Hohnik" target="_blank" rel="noopener">GitHub</a>
+  <button type="button" class="quicknav-help" data-help-toggle aria-label="Keyboard shortcuts">?</button>
 </nav>
+
+<!-- Keyboard reference. Opened with ? or the chip in the quick nav. -->
+<div id="help" class="help" hidden>
+  <div class="help-card" role="dialog" aria-label="Controls">
+    <h2>Controls</h2>
+    <dl>
+      <dt><span class="k">&#8592;</span> <span class="k">&#8594;</span> <span class="k">A</span> <span class="k">D</span></dt><dd>steer</dd>
+      <dt><span class="k">shift</span> <span class="k">W</span></dt><dd>boost</dd>
+      <dt><span class="k">1</span> <span class="k">2</span> <span class="k">3</span></dt><dd>autopilot to Start / About / Projects</dd>
+      <dt><span class="k">H</span></dt><dd>fly home</dd>
+      <dt><span class="k">esc</span></dt><dd>peel off, close the sheet</dd>
+      <dt><span class="k">~</span></dt><dd>dev mode &mdash; swap out every part of this page</dd>
+      <dt><span class="k">?</span></dt><dd>this list</dd>
+      <dt>touch</dt><dd>hold a finger anywhere and the plane flies to it</dd>
+    </dl>
+    <p class="quiet">In dev mode, click a control to step forward and right-click to step back.</p>
+    <button type="button" class="help-close" data-help-toggle>Close</button>
+  </div>
+</div>
 
 <div id="devbar" class="devbar" hidden></div>
 <button id="devchip" class="devchip" type="button" title="Dev mode (~)">dev</button>
@@ -132,12 +161,14 @@
   <style>#panel,.doc{display:block!important;position:static!important}#world,#hint,#quicknav,#devchip,.hud{display:none}</style>
 </noscript>
 
+<script src="scripts/util.js"></script>
 <script src="scripts/shaders.js"></script>
 <script src="scripts/config.js"></script>
 <script src="scripts/content.js"></script>
 <script src="scripts/world.js"></script>
 <script src="scripts/flight.js"></script>
 <script src="scripts/projects.js"></script>
+<script src="scripts/hud.js"></script>
 <script src="scripts/ui.js"></script>
 <script src="scripts/devbar.js"></script>
 <script src="scripts/main.js"></script>
