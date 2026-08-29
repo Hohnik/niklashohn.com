@@ -1,179 +1,322 @@
 # niklashohn.com
 
-A portfolio you fly through. The whole site is one WebGL landscape; the
-paper plane is the cursor. There is nothing to click to move around —
-you steer to a beacon and the sheet for that beacon opens.
+A portfolio site that you fly through. The site is one WebGL landscape.
+The paper plane is the pointer. You do not click a link to move. You fly
+to a beacon, and the sheet for that beacon opens.
 
-Live: <https://niklashohn.com>
+The live site is at <https://niklashohn.com>.
 
-## Getting around
+All the documentation in this repository is in ASD-STE100 Simplified
+Technical English. Section 7 gives the rules.
 
-| | |
+## 1 How to move
+
+| Control | Result |
 |---|---|
-| `←` `→` / `A` `D` | steer |
-| `shift` / `W` | boost |
-| `1` `2` `3` | autopilot to Start / About / Projects |
-| `H` | fly home |
-| `esc` | peel off, close the sheet |
-| `~` | dev mode |
-| `?` | the full list of keys |
+| `←` `→` or `A` `D` | Turn the plane |
+| `shift` or `W` | Increase the speed |
+| `1` `2` `3` | Fly to Start, About or Projects |
+| `H` | Fly to Start |
+| `esc` | Leave the beacon and close the sheet |
+| `~` | Open dev mode |
+| `?` | Show the list of keys |
 
-On a touch screen, hold a finger anywhere and the plane flies to it.
-`#about` and `#projects` are real deep links — they drop the plane
-straight onto the beacon.
+On a touch screen, hold a finger on the map. The plane flies to your
+finger.
 
-## Dev mode
+The addresses `#about` and `#projects` are direct links. Each one puts
+the plane at that beacon immediately.
 
-Press `~` (or add `?dev` to the URL, or hit the chip in the corner) for a
-panel that swaps out every part of the page while it runs. Left click steps
-a setting forward, right click steps back. Choices are kept in
-`localStorage`, so a look you like survives a reload.
+## 2 Dev mode
 
-**World** — Terrain (Rolling · Ridged · Dunes · Islands · Plateaus) ·
-Scale (Near · Mid · Far) · View (Stacked · Flat) · Lift (1 · 2 · 3) ·
-Pixel (3 · 4 · 6 · 8)
+To open dev mode, do one of these steps:
 
-**Look** — Preset (Alpine · Dusk · Sand · Mono · Neon · Blueprint · Autumn) ·
-Ink (Off · Every level · Index contours · Cliffs only) ·
-Light (Flat · Hillshade · Rim) · Water (Still · Drift · Dither) ·
-Clouds · Fog
+- Push the `~` key.
+- Add `?dev` to the address.
+- Click the small button in the bottom right corner.
 
-**Flight** — Plane (Dart · Glider · Delta · Wing · Arrow · Blocky) ·
-Control (Glide · Direct · Chase) · Camera (Centre · Lead · Lazy) ·
-Trail (Off · Dots · Ribbon) · Shadow · Occlude
+Dev mode shows a panel. The panel changes each part of the page while
+the page runs. Click a control to go forward through its options. Click
+it with the right button to go back. The browser keeps your choices, so
+they stay after you load the page again.
 
-**Interface** — Marker (Flag · Beacon · Monolith · Ring · Cairn) ·
-Panel (Paper · Card · Terminal · Blueprint) ·
-HUD (Radar · Arrows · Compass · Off) · Source (Live · Static) ·
-Labels · FPS
+### 2.1 The settings
 
-Twenty-three settings, seventy-six states, on the order of 10¹¹
-combinations. Six named presets — Paper, Topo, Alpine, Dusk, Arcade,
-Draft — bundle the ones worth keeping together, and **Random** rolls the
-lot. **New world** re-seeds the terrain noise without moving the beacons.
+The panel puts the settings in four groups.
 
-**Copy link** puts the whole configuration in a URL — one base-36
-character per setting behind a version digit, so
-`?look=101011011100001110100010` opens the page looking exactly like
-yours. A link written before a feature existed fails its length check and
-is ignored rather than applied to the wrong settings. **Save PNG**
-downloads the current frame, named after the look that produced it.
+World:
 
-## How the landscape is drawn
+- Terrain: Rolling, Ridged, Dunes, Islands, Plateaus.
+- Scale: Near, Mid, Far.
+- View: Stacked, Flat.
+- Lift: 1, 2, 3.
+- Pixel: 3, 4, 6, 8.
 
-Three fragment shader passes per frame, all at *cell* resolution — the
-canvas backing store is `width / pixelSize` across and CSS scales it back
-up by an exact integer factor, so the pixel grid is real rather than
-faked by rounding.
+Look:
 
-1. **Height.** One fragment per map cell. One of five generators — plain
-   fbm, a ridged multifractal, a domain-warped field, an island mask, or a
-   banded mesa profile — quantised into 28 levels and flooded flat below
-   the water line. Each landmark adds a cone that reaches the top level at
-   its centre, so every beacon is guaranteed a mountain you can see from
-   across the map — and its exact height is known without asking the GPU,
-   which is what lets the HTML labels sit on the summit.
+- Preset: Alpine, Dusk, Sand, Mono, Neon, Blueprint, Autumn.
+- Ink: Off, Every level, Index, Cliffs.
+- Light: Flat, Hillshade, Rim.
+- Water: Still, Drift, Dither.
+- Clouds: on or off.
+- Fog: on or off.
 
-2. **Visible layer.** The fake perspective, asked backwards. We want level
-   *L* drawn *L × lift* cells higher than the map says, so the levels stack
-   like paper cutouts seen from the front — but a fragment shader can
-   colour itself and cannot move itself. So each pixel asks instead: *who
-   lands on me?* Layer *L* would have come from *L × lift* cells below;
-   look there, and if the terrain is at least *L* high, layer *L* covers
-   this pixel. Search top-down, first hit wins. This gets its own pass
-   because the answer is needed three times per pixel — here and at two
-   neighbours — to find the contour edges.
+Flight:
 
-3. **Shading.** Palette, contour ink, relief shading, water, cloud
-   shadows, landmarks, the plane, its shadow and its trail. The plane is
-   drawn as maths rather than a sprite: two triangles as half-planes, so
-   it turns to any angle for free and still lands on whole cells. It also
-   banks into its turns — the shape is narrowed by `cos(bank)`, which is
-   the same wing seen from the front.
+- Plane: Dart, Glider, Delta, Wing, Arrow, Blocky.
+- Control: Glide, Direct, Chase.
+- Camera: Centre, Lead, Lazy.
+- Trail: Off, Dots, Ribbon.
+- Shadow: on or off.
+- Occlude: on or off.
 
-The gap between the plane and its shadow is what reads as altitude, and it
-closes by itself when the plane crosses a peak.
+Interface:
 
-Passes 1 and 2 depend only on where the camera is and how the terrain is
-configured, never on the plane — so they are skipped entirely on any frame
-where none of that changed. That is most of the frame's work saved
-whenever the camera settles, which is exactly when a sheet is open and
-someone is reading. The forest mask rides along in the height texture's
-green channel for the same reason: it depends only on world position, so
-it costs four sines once per cell rather than four sines per pixel per
-frame.
+- Marker: Flag, Beacon, Monolith, Ring, Cairn.
+- Panel: Paper, Card, Terminal, Blueprint.
+- HUD: Radar, Arrows, Compass, Off.
+- Source: Live, Static.
+- Labels: on or off.
+- FPS: on or off.
 
-Losing the GPU — which a phone will do just for switching tabs — is
-handled rather than fatal: the renderer stops, and everything that
-belonged to the context is rebuilt when it comes back.
+There are 23 settings and 76 states. Together they give more than 10^11
+combinations.
 
-## Layout
+### 2.2 The buttons
+
+| Button | Result |
+|---|---|
+| Paper, Topo, Alpine, Dusk, Arcade, Draft | Apply a group of settings that go well together |
+| Random | Set every look at random |
+| New world | Make new terrain noise. The beacons do not move |
+| Copy link | Copy an address that holds all your settings |
+| Save PNG | Save the frame on the screen |
+| Reset | Go back to the default settings |
+
+**Copy link** writes one base-36 character for each setting, after a
+version digit. An example is `?look=101011011100001110100010`. The
+length test refuses a link that a person made before you added a
+setting. It does not apply that link to the wrong settings.
+
+## 3 How the site draws the landscape
+
+The site draws three shader passes for each frame. All three work in
+*cells*, not in screen pixels. The canvas is `width / pixelSize` cells
+wide. CSS then makes it larger by an exact whole number. Therefore the
+pixel grid is real. The site does not make it from rounded values.
+
+### 3.1 Pass 1: the height field
+
+Pass 1 draws one fragment for each map cell. One of five generators
+gives the height:
+
+- Rolling: plain fbm noise.
+- Ridged: a ridged multifractal.
+- Dunes: a field that pulls its own coordinates sideways.
+- Islands: an fbm field that a slower noise mask cuts into groups.
+- Plateaus: a field in eight bands with steep sides.
+
+Pass 1 then cuts the height into 28 levels. It makes all levels below
+the sea line flat.
+
+Each beacon adds a cone. The cone reaches the top level at its centre.
+Therefore every beacon has a mountain that you see from a distance. The
+height at the centre is always the top level. JavaScript knows this
+number, so it can put the HTML labels on the summit. It does not ask the
+GPU.
+
+Pass 1 also writes a forest mask into the green channel. The mask
+depends only on the world position. Therefore pass 1 calculates it one
+time for each cell, and not one time for each pixel of each frame.
+
+### 3.2 Pass 2: the visible layer
+
+Pass 2 makes the false perspective. The site must draw level *L* at
+*L × lift* cells higher than the map says. The levels then stack like
+cut paper that you look at from the front.
+
+A fragment shader can give itself a colour. It cannot move itself. So
+each pixel asks a different question: *which layer lands on me?* Layer
+*L* comes from *L × lift* cells below. The shader looks there. If the
+terrain is *L* high or higher, layer *L* covers this pixel. The shader
+starts at the top level and goes down. The first hit wins.
+
+Pass 2 is a separate pass because pass 3 needs this answer three times
+for each pixel. It needs the pixel and its two neighbours to find the
+contour edges. One calculation for each cell, plus two texture reads,
+costs one third of three calculations.
+
+### 3.3 Pass 3: the picture
+
+Pass 3 draws these parts of the picture:
+
+- The terrain colours and the contour ink.
+- The relief shade and the water.
+- The cloud shadows.
+- The beacons and their markers.
+- The plane, its shadow and its trail.
+
+The shader draws the plane from mathematics, and not from a sprite. It
+uses two triangles as half-planes. Therefore the plane turns to any
+angle at no cost, and it still lands on whole cells. The plane also
+rolls into its turns. The shader makes the shape more narrow by
+`cos(roll)`, which is the same wing from the front.
+
+The gap between the plane and its shadow shows the height above the
+ground. The gap closes when the plane goes over a summit.
+
+### 3.4 What the site does not draw again
+
+Pass 1 and pass 2 depend only on the camera position and the terrain
+settings. They do not depend on the plane. So the site draws them again
+only after one of those changes. When the camera stops, the site keeps
+the two textures from the last frame. This is the usual condition when a
+sheet is open and a person reads it.
+
+If the browser takes the GPU away, the site does not fail. A phone does
+this when you change to a different tab. One function makes everything
+that belongs to the context, so it can make it again. The renderer stops
+until the context comes back.
+
+## 4 Speed
+
+Measurements come from a software rasteriser (SwiftShader) on a shared
+CPU. A real GPU is much faster. Use these numbers to compare one change
+against another, and not as a target.
+
+- The JavaScript work is 0.4 ms of a 40 ms frame. The frame loop makes
+  no new objects. It makes the scene object, the marker objects and
+  the trail points one time. Then it writes into them.
+- Pass 3 sends about 10 uniforms for each frame. The other 22 go to the
+  GPU only after a setting changes.
+- If you turn off almost all the shader options, the frame time falls
+  from 38 ms to 32 ms. Therefore the fixed cost for each draw controls
+  this environment, and not the work for each pixel.
+
+Two rules come from these measurements:
+
+1. Measure a change. Do not assume it.
+2. A test to leave a shader function early is not always faster. One
+   such test made the frame 3 percent slower. We took it out again.
+
+## 5 Files
 
 ```
-index.html          the page: canvas, sheets, HUD, help, dev bar
-styles.css          everything on top of the canvas
-scripts/util.js     the few helpers more than one file needs
-scripts/shaders.js  the three GLSL passes
-scripts/config.js   the feature registry — the dev bar renders itself from it
-scripts/content.js  landmark positions, bundled project list
-scripts/world.js    the renderer
-scripts/flight.js   flight model, arrival, orbit, camera
-scripts/projects.js the GitHub list, live with a bundled fallback
-scripts/hud.js      labels, radar, arrows, compass
-scripts/ui.js       sheets, help, routing, keyboard
-scripts/devbar.js   the variant switcher
-scripts/main.js     wiring and the frame loop
-tools/verify.mjs    the browser test suite
-tools/og.mjs        renders og.png, the social card, from the site
+index.html          The page: canvas, sheets, HUD, help, dev bar
+styles.css          Everything above the canvas
+og.png              The preview image, from tools/og.mjs
+scripts/util.js     The helpers that more than one file needs
+scripts/shaders.js  The three GLSL passes
+scripts/config.js   The settings registry
+scripts/content.js  Beacon positions and the bundled project list
+scripts/world.js    The renderer
+scripts/flight.js   The flight model, arrival, orbit and camera
+scripts/projects.js The GitHub list, live with a bundled copy
+scripts/hud.js      Labels, radar, arrows and compass
+scripts/ui.js       Sheets, help, addresses and keys
+scripts/devbar.js   The settings panel
+scripts/main.js     The start-up steps and the frame loop
+tools/verify.mjs    The browser tests
+tools/ste-check.mjs The check for ASD-STE100
+tools/og.mjs        Makes og.png from the live page
 tools/serve.mjs     `npm start`
-tools/static-server.mjs   the one static server all three share
-legacy/             the previous site (the raven), still runnable
+tools/static-server.mjs   The one server that all three tools use
 ```
 
-The site itself is static files with no build step and no dependencies:
-open `index.html` and it runs, from `file://` as well as from a server.
-`package.json` exists only for the tests.
+The site is static files. It has no build step and no dependency. Open
+`index.html` and it runs, from a `file://` address or from a server.
+`package.json` is only for the tests.
 
-Adding a new version of something means adding one entry to
-`NH.FEATURES` in `scripts/config.js`. The dev bar, the tooltip, the
-storage and the reset all follow from that.
+To add a new option, add one entry to `NH.FEATURES` in
+`scripts/config.js`. The dev bar, the help text, the storage and the
+reset then work without more changes.
 
-Without WebGL the page falls back to the three sheets stacked and
-scrollable, so the content is never behind the graphics.
+If the browser has no WebGL, the page shows the three sheets one after
+the other. You can read all the content without the graphics.
 
-## Tests
+## 6 Tests
 
 ```
 npm install
-npm test              # npm run test:keep leaves the screenshots behind
-npm start             # serve the directory on :8743
-npm run og            # re-render og.png from the live page
+npm test              # The language check, then the browser tests
+npm run lint:ste      # The language check only
+npm run test:browser  # The browser tests only
+npm run test:keep     # The browser tests, and keep the screenshots
+npm start             # Serve this directory on port 8743
+npm run og            # Make og.png again from the live page
 ```
 
-`tools/verify.mjs` serves the directory and drives a headless Chromium
-through 99 checks: that the world renders, that flying to a beacon opens
-the right sheet and updates the URL, that typing in the project filter
-does not steer the plane, that **every** variant of every feature compiles,
-draws something, and draws something *different* from its neighbours, that
-the layout holds at three viewport sizes with the dev bar open, that
-choices survive a reload, that the no-WebGL and reduced-motion paths still
-give you the content, that a shared look link restores the look and a
-malformed one is refused, that the terrain passes really are skipped once
-the camera settles, and that losing and regaining the GPU leaves the page
-drawing rather than blank. It runs on every push
-(`.github/workflows/verify.yml`) and uploads the screenshots when it fails.
+`tools/verify.mjs` serves the directory. It then drives a headless
+Chromium through 99 checks. The checks include these:
 
-## Ideas still on the list
+- The world draws.
+- A flight to a beacon opens the correct sheet and changes the address.
+- Text in the project filter does not turn the plane.
+- Every option of every setting compiles, draws, and draws something
+  different from its neighbours.
+- The layout stays correct at four screen sizes with the dev bar open.
+- The browser keeps the settings after a reload.
+- A shared look link gives that look. A damaged link does nothing.
+- The page without WebGL and the page with less motion both show the
+  content.
+- The site does not draw the terrain passes again after the camera
+  stops.
+- The page draws again after it loses the GPU and gets it back.
 
-1. Non standard hover animation [hilights](https://raphaelameaume.com/) (text marker style)
-2. Text on the website has a appearence [animation](https://soulwire.co.uk/) (fly in like powerpoint, decrypt, etc)
-3. Something from [NatureOfCode](https://natureofcode.com) or fractal flames or height lines
-4. Beautiful Images (landscape in my area, places)
-5. Some [projects](https://100.antfu.me/) for people to explore
-6. Increase size of the duck based on if it stands on something or height of the map in the background
+The tests run after every push. Refer to `.github/workflows/verify.yml`.
+The workflow keeps the screenshots when a test fails.
 
-### Image drawing vector
+## 7 Language of this document
 
-1. Generate edges of an [image](https://miro.medium.com/v2/resize:fit:644/1*S60hg-pTDfj_MPBY-HkXrA.png)
-2. Have a Vector (that draws a continuous line) move in a random direction
-with the probability higher flying towards the edges detected in the image
+All documentation in this repository, and all comments in the code, use
+ASD-STE100 Simplified Technical English. The text that a visitor reads
+on the site is content, and it does not follow these rules.
+
+`npm run lint:ste` tests the documentation and the comments. The test
+also runs before the browser tests, and on every push. These are the
+main rules:
+
+- Use the approved word, and use it in one part of speech only.
+- Keep instruction sentences to 20 words or fewer.
+- Keep descriptive sentences to 25 words or fewer.
+- Give one instruction in each sentence.
+- Use the active voice.
+- Use simple verb tenses.
+- Keep paragraphs to six sentences or fewer.
+- Use vertical lists for steps and for sets of items.
+- Use the same word for the same thing every time.
+
+These are the technical names that this repository uses. Do not replace
+them with other words:
+
+| Name | Meaning |
+|---|---|
+| cell | One square of the pixel grid |
+| level | One of the 28 steps of the terrain |
+| layer | The level that you see at a screen cell |
+| pass | One of the three shader stages |
+| beacon | One of the three places you can fly to |
+| sheet | The panel of text at a beacon |
+| lift | The cells that the site adds for each level |
+| look | A complete set of settings |
+| heading | The direction of the nose of the plane |
+| bearing | The direction from the plane to a beacon |
+
+## 8 Ideas for later
+
+1. A hover animation that is not standard, in the style of
+   [hilights](https://raphaelameaume.com/).
+2. An animation for the text when it appears, in the style of
+   [soulwire](https://soulwire.co.uk/).
+3. Work from [NatureOfCode](https://natureofcode.com), fractal flames or
+   height lines.
+4. Photographs of the landscape near Moosburg.
+5. More [projects](https://100.antfu.me/) for people to look at.
+6. Make the duck larger when it stands on something high.
+
+### 8.1 A vector that draws an image
+
+1. Find the edges of an
+   [image](https://miro.medium.com/v2/resize:fit:644/1*S60hg-pTDfj_MPBY-HkXrA.png).
+2. Move a vector in a random direction. The vector draws one continuous
+   line. Give it a higher probability to move to an edge.

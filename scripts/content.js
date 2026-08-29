@@ -1,18 +1,16 @@
-/* ============================================================
-   content.js — the places on the map, and what is written there.
+/* content.js — the places on the map, and the text at each place.
 
-   Landmark positions are an equilateral triangle, 300 cells to a
-   side, so no two are ever much further apart than any other two
-   and the map never has a "far corner".
-   ============================================================ */
+   The three beacons make an equilateral triangle with sides of 300
+   cells. Thus each pair of beacons has the same distance, and the
+   map has no far corner. */
 window.NH = window.NH || {};
 
 NH.MARK_RADIUS = 130;   // radius of a landmark mountain, in cells
 NH.ARRIVE = 44;         // fly this close and the sheet opens
 NH.DEPART = 88;         // leave this far and it closes again
 
-/* `initial` is the single letter the radar draws next to each blip,
-   so the three have to stay distinguishable at one character. */
+/* The radar draws `initial` next to each mark. The three letters
+   must stay different from each other. */
 NH.MARKS = [
   { id: 'home',     name: 'Niklas Hohn', tag: 'Start', initial: 'N', world: { x: 0,    y: -173 } },
   { id: 'about',    name: 'About',       tag: 'Who',   initial: 'A', world: { x: -150, y: 87 } },
@@ -21,11 +19,13 @@ NH.MARKS = [
 
 NH.GITHUB_USER = 'Hohnik';
 
-/* Bundled copy of the repository list. It is the fallback when
-   the GitHub API is unreachable or rate-limited (60 anonymous
-   requests an hour per IP), and it is what the "Static" source
-   variant shows. Descriptions are GitHub's own, verbatim; repos
-   without one simply have none. */
+/* A copy of the repository list. The site shows this copy when it
+   cannot reach the GitHub API. GitHub permits only 60 requests an
+   hour for each address without a key. The Static source option
+   also shows this copy.
+
+   Each description is the text from GitHub, with no change. A
+   repository with no description has none here. */
 NH.PROJECTS_STATIC = [
   { name: 'noc-examples-pygame', stars: 16, lang: 'Python', updated: '2026-08-14',
     desc: '"Nature of Code" examples pygame port',
@@ -75,8 +75,8 @@ NH.PROJECTS_STATIC = [
   return p;
 });
 
-/* Dot colours for the language chips. Anything unlisted falls
-   back to a neutral grey. */
+/* The dot colour for each language chip. A language that is not
+   in this list gets grey. */
 NH.LANG_COLORS = {
   'Python': '#3572a5', 'JavaScript': '#f1e05a', 'TypeScript': '#3178c6',
   'Jupyter Notebook': '#da5b0b', 'HTML': '#e34c26', 'CSS': '#563d7c',

@@ -1,9 +1,7 @@
-/* ============================================================
-   ui.js — the sheets, the routing and the keyboard.
+/* ui.js — the sheets, the addresses and the keys.
 
-   The HUD lives in hud.js; this file owns everything with words
-   in it and the rule that the URL always says where the plane is.
-   ============================================================ */
+   The HUD is in hud.js. This file controls each part with words in
+   it. It also keeps the address in step with the plane. */
 window.NH = window.NH || {};
 NH.sheetOpen = false;
 
@@ -29,8 +27,8 @@ NH.UI = (function () {
     openId = id;
     NH.sheetOpen = true;
     panel.hidden = false;
-    /* Re-trigger the entry animation even when one sheet replaces
-       another without the element ever leaving the DOM. */
+    /* Start the entry animation again. One sheet can replace
+       another while the element stays in the DOM. */
     panel.style.animation = 'none';
     void panel.offsetWidth;
     panel.style.animation = '';
@@ -60,9 +58,9 @@ NH.UI = (function () {
     if (announce) announce.textContent = 'Flying.';
   }
 
-  /* replaceState instead of location.hash: it updates the address
-     bar without firing hashchange, so our own arrivals never look
-     like a navigation request coming back at us. */
+  /* Use replaceState, and not location.hash. It changes the
+     address bar and sends no hashchange event. Thus a flight of
+     our own never looks like a request from the person. */
   function setHash(h) {
     hashWeSet = h;
     try { history.replaceState(null, '', location.pathname + location.search + h); }
@@ -83,9 +81,9 @@ NH.UI = (function () {
     const show = force === undefined ? help.hidden : force;
     help.hidden = !show;
     if (show) {
-      /* Remember where focus came from so closing puts it back —
-         otherwise a keyboard user lands at the top of the page
-         every time they check the shortcuts. */
+      /* Keep the element that had the focus. The close step then
+         gives the focus back to it. If it does not, a person with
+         a keyboard goes to the top of the page each time. */
       helpOpener = document.activeElement;
       const close = help.querySelector('.help-close');
       if (close) close.focus();
@@ -100,7 +98,7 @@ NH.UI = (function () {
   function frame(dt) {
     NH.Hud.frame(dt);
 
-    if (NH.cfg.get('fps')) {
+    if (NH.cfg.v.fps) {
       fpsBox.hidden = false;
       if (dt > 0) fpsAvg += (1 / dt - fpsAvg) * 0.08;
       const st = NH.World.stats;
@@ -124,12 +122,12 @@ NH.UI = (function () {
 
   function applyConfig() {
     const b = document.body;
-    PANEL_SKINS.forEach(function (v) { b.classList.toggle('panel-' + v, NH.cfg.get('panel') === v); });
-    HUD_MODES.forEach(function (v) { b.classList.toggle('hud-' + v, NH.cfg.get('hud') === v); });
+    PANEL_SKINS.forEach(function (v) { b.classList.toggle('panel-' + v, NH.cfg.v.panel === v); });
+    HUD_MODES.forEach(function (v) { b.classList.toggle('hud-' + v, NH.cfg.v.hud === v); });
     NH.Hud.reset();
   }
 
-  /* ---------------- wiring ---------------- */
+  /* ---------------- start-up ---------------- */
 
   function routeFromHash() {
     const id = (location.hash || '').replace('#', '');
@@ -150,9 +148,9 @@ NH.UI = (function () {
     if (['ArrowLeft', 'ArrowRight', 'a', 'd', 'A', 'D'].indexOf(e.key) >= 0) dropHint();
   }
 
-  /* The default hint names keys, which is the wrong advice on a
-     phone. Coarse pointer means there is no keyboard to talk
-     about, so say the thing that actually works there. */
+  /* The default hint names keys. That is wrong on a phone. A
+     coarse pointer shows that there is no keyboard. So tell the
+     person the gesture that works there. */
   function tuneHintForTouch() {
     if (!window.matchMedia || !window.matchMedia('(pointer: coarse)').matches) return;
     hint.innerHTML = 'hold anywhere to fly &middot; reach a beacon';
@@ -203,12 +201,12 @@ NH.UI = (function () {
       NH.Flight.placeAt(start);
     } else if (window.matchMedia &&
                window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-      /* The opening fly-in is a nice touch but it is also a
-         two-second wait before any words appear. Anyone who has
-         asked for less motion gets the words straight away. */
+      /* The first flight looks good, but it also makes you wait
+         two seconds for the first words. A person who asks for
+         less motion gets the words immediately. */
       NH.Flight.placeAt('home');
     }
   }
 
-  return { init: init, frame: frame, dropHint: dropHint, get openId() { return openId; } };
+  return { init: init, frame: frame, get openId() { return openId; } };
 })();

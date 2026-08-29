@@ -1,13 +1,13 @@
-/* ============================================================
-   devbar.js — the variant switcher.
+/* devbar.js — the panel that changes the settings.
 
-   Rendered entirely from NH.GROUPS / NH.FEATURES / NH.PRESETS, so
-   it can never drift out of sync with what actually exists: a new
-   variant is one entry in config.js and it appears here with its
-   label, its tooltip and its persistence already working.
+   This file draws the panel from NH.GROUPS, NH.FEATURES and
+   NH.PRESETS. Thus the panel always agrees with the registry.
 
-   Press ~ (or the chip in the corner, or load with ?dev).
-   ============================================================ */
+   A new option is one entry in config.js. It then appears here
+   with its label and its help text. The browser also keeps it.
+
+   To open the panel, push ~, or click the small button in the
+   corner, or load the page with ?dev. */
 window.NH = window.NH || {};
 
 NH.DevBar = (function () {
@@ -40,9 +40,9 @@ NH.DevBar = (function () {
       btn.addEventListener('click', function () { NH.cfg.step(f.key); });
     } else {
       btn.className = 'dev-cycle';
-      /* Left click steps forward, right click steps back — the
-         option lists run to seven now, and overshooting the one
-         you wanted should not mean going round again. */
+      /* The left button steps forward. The right button steps
+         back. One list has seven options. If you go past the
+         option that you want, you must not go round again. */
       btn.addEventListener('click', function () { NH.cfg.step(f.key, 1); });
       btn.addEventListener('contextmenu', function (e) {
         e.preventDefault();
@@ -87,8 +87,8 @@ NH.DevBar = (function () {
     return head;
   }
 
-  /* Say what happened on the button itself: there is nowhere else
-     in this bar for a status line to live. */
+  /* Show the result on the button. The bar has no other place for
+     a line of status. */
   function flash(btn, text) {
     const was = btn.textContent;
     btn.textContent = text;
@@ -105,7 +105,8 @@ NH.DevBar = (function () {
     }
   }
 
-  /* Clipboard access needs a secure context, which file:// is not. */
+  /* The clipboard needs a secure context. A file:// address is
+     not one. */
   function fallbackCopy(url, btn) {
     const box = document.createElement('input');
     box.value = url;
@@ -141,17 +142,18 @@ NH.DevBar = (function () {
   function sync() {
     widgets.forEach(function (w) {
       if (w.f.type === 'toggle') {
-        w.btn.setAttribute('aria-pressed', String(NH.cfg.get(w.f.key)));
+        w.btn.setAttribute('aria-pressed', String(NH.cfg.v[w.f.key]));
       } else {
         w.btn.textContent = NH.cfg.label(w.f.key);
       }
     });
   }
 
-  /* The bar wraps to a different number of rows depending on the
-     window width, and the radar and the sheets both have to stay
-     clear of it. Rather than guess a height in CSS, measure the
-     real one and publish it as a custom property. */
+  /* The number of rows in the bar changes with the width of the
+     window. The radar and the sheets must stay clear of the bar.
+     So this function measures the real height. It then writes the
+     height into a custom property. A guess in the CSS would be
+     wrong at some widths. */
   function publishHeight() {
     const h = bar.hidden ? 0 : bar.offsetHeight;
     document.body.style.setProperty('--devbar-h', h + 'px');
@@ -162,6 +164,7 @@ NH.DevBar = (function () {
     bar.hidden = !v;
     document.body.classList.toggle('dev-on', v);
     chip.setAttribute('aria-pressed', String(v));
+    NH.Hud.devMode(v);
     publishHeight();
   }
 
@@ -183,9 +186,10 @@ NH.DevBar = (function () {
     } else {
       window.addEventListener('resize', publishHeight);
     }
-    /* A preset can change a label's width and reflow the rows. */
+    /* A preset can change the width of a label. The rows then
+       flow again. */
     NH.on('config', publishHeight);
   }
 
-  return { init: init, get open() { return open; }, setOpen: setOpen };
+  return { init: init };
 })();

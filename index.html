@@ -10,8 +10,8 @@
 <meta property="og:description" content="Fly a paper plane over a WebGL landscape to navigate the site." />
 <meta property="og:type" content="website" />
 <meta property="og:url" content="https://niklashohn.com/" />
-<!-- Rendered from the site itself by tools/og.mjs, so the preview
-     is the real thing rather than a drawing of it. -->
+<!-- tools/og.mjs makes this image from the site. Thus the preview
+     shows the real page. -->
 <meta property="og:image" content="https://niklashohn.com/og.png" />
 <meta property="og:image:width" content="1200" />
 <meta property="og:image:height" content="630" />
@@ -21,9 +21,9 @@
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%235b7f9e'/%3E%3Cpath d='M2 8 L13 3 L9 13 L7.5 8.5 Z' fill='%23fbfaf5'/%3E%3C/svg%3E" />
 <link rel="stylesheet" href="styles.css" />
 
-<!-- The page is a canvas with three sheets behind a flight model,
-     which is not something a crawler can read. This says plainly
-     who it belongs to. -->
+<!-- The page is a canvas with three sheets behind a flight model.
+     A crawler cannot read that. This block gives the same facts in
+     a form that it can read. -->
 <script type="application/ld+json">
 {
   "@context": "https://schema.org",
@@ -63,7 +63,8 @@
   <span class="k">shift</span> boost &middot; fly to a beacon
 </p>
 
-<!-- Arriving somewhere changes the whole page silently, so say so. -->
+<!-- A flight to a beacon changes the whole page and makes no sound.
+     This line tells a screen reader what occurred. -->
 <p id="announce" class="visually-hidden" role="status" aria-live="polite"></p>
 
 <main id="panel" class="panel" hidden>

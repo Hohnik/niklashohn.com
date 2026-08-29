@@ -1,14 +1,12 @@
-/* ============================================================
-   hud.js — the four ways of finding a beacon you cannot see.
+/* hud.js — four ways to find a beacon that you cannot see.
 
-   Radar, edge arrows and a compass strip are three answers to the
-   same question, switchable in dev mode; "Off" is the fourth, for
-   anyone who would rather just look at the map.
+   The radar, the edge arrows and the compass strip give three
+   answers to the same question. Dev mode selects one of them. The
+   fourth option is Off, for a person who wants only the map.
 
-   Everything here runs once per frame, so the two rules are: never
-   read layout in the same breath as writing it, and never rewrite
-   text sixty times a second when eight will do.
-   ============================================================ */
+   Each function here runs one time in each frame. So obey two
+   rules. Do not read the layout and write it in the same step. Do
+   not write text 60 times a second when 8 times is enough. */
 window.NH = window.NH || {};
 
 NH.Hud = (function () {
@@ -21,9 +19,11 @@ NH.Hud = (function () {
   const arrows = {};
   const compassItems = [];
   let radarCtx = null;
-  let labelClock = 0, arrowClock = 0, retextArrows = true;
+  let labelClock = 0, arrowClock = 0, compassClock = 0, retextArrows = true;
 
   const RADAR_RANGE = 460;   // world cells from the middle to the rim
+  const rect = { l: 0, r: 0, t: 0, b: 0 };   // written on each frame
+  let devOn = false;
   const TEXT_EVERY = 0.125;  // seconds between text rewrites
 
   /* ---------------- landmark labels ---------------- */
@@ -39,7 +39,7 @@ NH.Hud = (function () {
   }
 
   function updateLabels(dt) {
-    const on = NH.cfg.get('labels');
+    const on = NH.cfg.v.labels;
     const p = NH.Flight.state.pos;
     labelClock += dt;
     const retext = labelClock >= TEXT_EVERY;
@@ -48,15 +48,15 @@ NH.Hud = (function () {
     NH.MARKS.forEach(function (m) {
       const el = ensureLabel(m);
       if (!on) { el.style.display = 'none'; return; }
-      /* Landmarks always sit on a cone that reaches the top level,
-         so their drawn height is known exactly — no need to ask
-         the GPU where the ground is. */
+      /* Each beacon stands on a cone that reaches the top
+         level. So the drawn height is exact. This code does not
+         ask the GPU for the height of the ground. */
       const s = NH.Flight.project(m.world, NH.LEVELS);
       const W = window.innerWidth, H = window.innerHeight;
-      /* Only label a beacon whose top is actually on screen. Past
-         that the HUD takes over — a label pinned to the edge for a
-         beacon you cannot see is just noise next to the arrow that
-         already says where it is. */
+      /* Put a label only on a beacon with its top on the
+         screen. For the other beacons the HUD is enough. A label
+         at the edge, for a beacon that you cannot see, adds
+         nothing to the arrow that is already there. */
       if (s.x < 0 || s.x > W || s.y < 0 || s.y > H) {
         el.style.display = 'none';
         return;
@@ -76,14 +76,14 @@ NH.Hud = (function () {
       /* Clear the tallest marker sprite (18 cells) plus a gap, in
          screen pixels, so the label never sits on the beacon. */
       const top = s.y - 19 * NH.World.cells.pixel - 6;
-      /* Then keep the whole pill on screen. A label sliding off the
-         edge loses exactly the half that says how far away the
-         thing is, which is the half worth reading. */
+      /* Then keep the whole label on the screen. A label that
+         goes past the edge loses the half with the distance in
+         it. That is the half that a person reads. */
       const halfW = el._w / 2 + 8;
       const x = NH.util.clamp(s.x, halfW, W - halfW);
       const y = NH.util.clamp(top, el._h + 8, H - 8);
-      /* Positioned with a transform rather than left/top: a
-         transform is composited and never touches layout. */
+      /* Use a transform, and not left and top. The browser
+         composites a transform and does not touch the layout. */
       el.style.transform = 'translate(-50%, -100%) translate(' +
         Math.round(x) + 'px,' + Math.round(y) + 'px)';
       el.style.opacity = (x !== s.x || y !== top) ? '.6' : '1';
@@ -112,13 +112,13 @@ NH.Hud = (function () {
     const cx = W / 2, cy = H / 2;
     const padX = Math.min(70, W * 0.12);
     const padY = Math.min(70, H * 0.14);
-    /* Asymmetric insets: the dev bar owns the top strip and the
-       quick nav owns the bottom one, and both sit above the HUD. */
-    const rect = {
-      l: padX, r: W - padX,
-      t: padY + (document.body.classList.contains('dev-on') ? 130 : 0),
-      b: H - padY - 34
-    };
+    /* The dev bar owns the top strip and the quick nav owns the
+       bottom one, and both are above the HUD. So the box is not
+       the same on all four sides. */
+    rect.l = padX;
+    rect.r = W - padX;
+    rect.t = padY + (devOn ? 130 : 0);
+    rect.b = H - padY - 34;
 
     NH.MARKS.forEach(function (m) {
       const el = ensureArrow(m);
@@ -155,42 +155,52 @@ NH.Hud = (function () {
 
   /* ---------------- compass strip ---------------- */
 
-  function updateCompass() {
-    const FOV = 1.25;                       // radians shown either side of the nose
+  /* The strip shows the four cardinal points and the three
+     beacons. This code makes the entries one time and then writes
+     into them, because the function runs on each frame. */
+  const compassEntries = [
+    { label: 'N', card: true, bearing: Math.PI / 2 },
+    { label: 'E', card: true, bearing: 0 },
+    { label: 'S', card: true, bearing: -Math.PI / 2 },
+    { label: 'W', card: true, bearing: Math.PI }
+  ];
+  NH.MARKS.forEach(function (m) {
+    compassEntries.push({ label: m.name, card: false, bearing: 0, mark: m });
+  });
+
+  function updateCompass(dt) {
+    const FOV = 1.25;                       // radians each side of the nose
     const w = compassStrip.parentElement.clientWidth;
     const heading = NH.Flight.state.heading;
     const p = NH.Flight.state.pos;
 
-    const entries = [
-      { label: 'N', card: true, bearing: Math.PI / 2 },
-      { label: 'E', card: true, bearing: 0 },
-      { label: 'S', card: true, bearing: -Math.PI / 2 },
-      { label: 'W', card: true, bearing: Math.PI }
-    ].concat(NH.MARKS.map(function (m) {
-      return {
-        label: m.name + ' ' + Math.round(Math.hypot(p.x - m.world.x, p.y - m.world.y)),
-        card: false,
-        bearing: Math.atan2(m.world.y - p.y, m.world.x - p.x)
-      };
-    }));
+    compassClock += dt;
+    const retext = compassClock >= TEXT_EVERY;
+    if (retext) compassClock = 0;
 
-    while (compassItems.length < entries.length) {
-      const el = document.createElement('span');
-      el.className = 'compass-tick';
-      compassStrip.appendChild(el);
-      compassItems.push(el);
-    }
-    entries.forEach(function (e, i) {
-      const el = compassItems[i];
+    for (let i = 0; i < compassEntries.length; i++) {
+      const e = compassEntries[i];
+      if (e.mark) {
+        e.bearing = Math.atan2(e.mark.world.y - p.y, e.mark.world.x - p.x);
+      }
+      let el = compassItems[i];
+      if (!el) {
+        el = document.createElement('span');
+        el.className = 'compass-tick' + (e.card ? ' card' : '');
+        compassStrip.appendChild(el);
+        compassItems[i] = el;
+      }
       const rel = NH.util.angleDelta(heading, e.bearing);
-      if (Math.abs(rel) > FOV) { el.style.display = 'none'; return; }
+      if (Math.abs(rel) > FOV) { el.style.display = 'none'; continue; }
       el.style.display = '';
-      el.className = 'compass-tick' + (e.card ? ' card' : '');
       el.style.left = (w / 2 + (rel / FOV) * (w / 2 - 12)) + 'px';
       el.style.opacity = String(1 - Math.abs(rel) / FOV * 0.65);
-      el.textContent = e.label;
-    });
-    for (let i = entries.length; i < compassItems.length; i++) compassItems[i].style.display = 'none';
+      if (retext) {
+        el.textContent = e.mark
+          ? e.label + ' ' + Math.round(Math.hypot(p.x - e.mark.world.x, p.y - e.mark.world.y))
+          : e.label;
+      }
+    }
   }
 
   /* ---------------- radar ---------------- */
@@ -248,19 +258,28 @@ NH.Hud = (function () {
 
   function frame(dt) {
     updateLabels(dt);
-    const mode = NH.cfg.get('hud');
+    const mode = NH.cfg.v.hud;
     if (mode === 'arrows') updateArrows(dt);
-    else if (mode === 'compass') updateCompass();
+    else if (mode === 'compass') updateCompass(dt);
     else if (mode === 'radar') updateRadar();
   }
 
-  /* Anything the previous HUD left on screen has to be put away by
-     hand: the CSS only hides the container, not the absolutely
-     positioned children inside it. */
+  /* Remove by hand each item that the previous HUD left on the
+     screen. The CSS hides only the container. It does not hide
+     the children inside it, which have absolute positions. */
   function reset() {
+    /* The CSS hides the container of the HUD that is off. It
+       does not hide the children inside it. This code gives each
+       child its own position. */
     Object.keys(arrows).forEach(function (k) { arrows[k].style.display = 'none'; });
     compassItems.forEach(function (el) { el.style.display = 'none'; });
   }
 
-  return { frame: frame, reset: reset };
+  /* The dev bar tells the HUD when it opens, so that the arrows
+     keep clear of it. A test of the class on each frame would read
+     the DOM sixty times a second to learn something that changes
+     when a person clicks. */
+  function devMode(on) { devOn = on; }
+
+  return { frame: frame, reset: reset, devMode: devMode };
 })();

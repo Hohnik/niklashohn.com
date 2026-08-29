@@ -1,15 +1,15 @@
-/* ============================================================
-   flight.js — the paper plane, and therefore the navigation.
+/* flight.js — the paper plane, and thus the movement.
 
-   There are no links to click to move around: the plane IS the
-   cursor. Fly within ARRIVE cells of a landmark and it slips
-   into a slow orbit, the camera settles on the mountain and the
-   sheet for that landmark opens. Touch the controls again and it
-   peels off and the sheet closes. Everything else — the quick
-   nav, the #hash links, the keyboard shortcuts — is just
-   autopilot handing the same two moves to the same state machine,
-   so there is only ever one way to arrive somewhere.
-   ============================================================ */
+   You do not click a link to move. The plane is the pointer.
+
+   Fly to within ARRIVE cells of a beacon. The plane then starts a
+   slow orbit, the camera stops on the mountain, and the sheet for
+   that beacon opens. Touch a control again. The plane then leaves
+   the orbit and the sheet closes.
+
+   The quick nav, the #hash links and the keys all use the same
+   two steps. The autopilot gives them to the same state machine.
+   Thus there is only one way to get to a beacon. */
 window.NH = window.NH || {};
 
 NH.Flight = (function () {
@@ -18,27 +18,37 @@ NH.Flight = (function () {
   const TURN = 2.3;        // radians per second
   const ORBIT_R = 36;
   const ORBIT_W = 0.6;     // radians per second around a landmark
-  const TRAIL_EVERY = 0.055;
+  const TRAIL_EVERY = 0.055;   // seconds between trail points
+  const TRAIL_POINTS = 10;     // must match the array in the shader
   const RANGE = 1200;      // beyond this the map gently steers you back
   const LOOK_AHEAD = 58;   // cells the 'lead' camera runs in front of the nose
+
+  /* One point for each slot that the shader can draw. This
+     function makes them one time. The loop then writes into them,
+     and it throws none of them away. */
+  function makeTrail() {
+    const out = [];
+    for (let i = 0; i < TRAIL_POINTS; i++) out.push({ x: 0, y: 0, life: 0 });
+    return out;
+  }
 
   const state = {
     pos: { x: 0, y: -323 },
     heading: Math.PI / 2,
-    bank: 0,               // radians of roll, from how hard it is turning
+    bank: 0,               // radians of roll, from the rate of turn
     cam: { x: 0, y: 0 },
     mode: 'fly',           // 'fly' | 'orbit'
-    at: null,              // landmark id being orbited
-    auto: null,            // landmark id the autopilot is aiming for
+    at: null,              // the id of the beacon in the orbit
+    auto: null,            // the id of the beacon for the autopilot
     orbitAngle: 0,
-    trail: [],
+    trail: makeTrail(),
     trailClock: 0,
-    suppress: {},          // landmark ids that must be left before re-arming
+    suppress: {},          // beacon ids that need a departure first
     camReady: false
   };
 
   const keys = {};
-  let pointer = null;      // {x,y} in CSS pixels, while a pointer is steering
+  let pointer = null;      // {x,y} in CSS pixels, while a pointer turns the plane
   let pointerHeld = false;
 
   function markById(id) {
@@ -49,7 +59,7 @@ NH.Flight = (function () {
   const angleDelta = NH.util.angleDelta;
   const typing = NH.util.typing;
 
-  /* -1 = right, +1 = left, 0 = none. */
+  /* A result of -1 is right, +1 is left, and 0 is no turn. */
   function steerInput() {
     if (typing()) return 0;
     let s = 0;
@@ -66,67 +76,82 @@ NH.Flight = (function () {
   }
   function boosting() { return !typing() && (!!keys.Shift || thrustInput() > 0); }
 
-  function lift() { return NH.cfg.get('view') === 'flat' ? 0 : NH.cfg.get('lift'); }
+  function lift() { return NH.cfg.v.view === 'flat' ? 0 : NH.cfg.v.lift; }
 
-  /* Where the camera wants to be, in world cells, for the bottom
-     left of the screen. */
+  /* Where the camera must be, in world cells, for the bottom left
+     of the screen. The result goes into one object that this file
+     keeps. The function runs on each frame, and a new object on
+     each frame gives work to the garbage collector. */
+  const camWant = { x: 0, y: 0 };
+
   function camTarget() {
     const c = NH.World.cells;
     const L = lift();
     if (state.mode === 'orbit') {
       const m = markById(state.at);
       if (m) {
-        /* Frame the landmark's drawn peak rather than its map
-           position, otherwise the mountain sits off the top. And
-           lean the view away from wherever the sheet is docked —
-           left of the screen on wide viewports, along the bottom
-           on narrow ones — so the beacon you flew to stays in
-           sight while you read about it. */
+        /* Put the drawn summit in the frame, and not the map
+           position. If you use the map position, the mountain
+           goes off the top of the screen.
+
+           Then move the view away from the sheet. On a wide
+           screen the sheet is at the left. On a narrow screen it
+           is along the bottom. Thus the beacon stays in sight
+           while you read about it. */
         let ox = 0, oy = 0;
         if (NH.sheetOpen) {
           const w = window.innerWidth;
-          if (w >= 960) ox = c.w * 0.17;          // sheet docked left
-          else if (w <= 640) oy = c.h * 0.17;     // sheet is a bottom drawer
-          else oy = c.h * 0.28;                   // sheet centred, tallest of the three
+          if (w >= 960) ox = c.w * 0.17;          // sheet at the left
+          else if (w <= 640) oy = c.h * 0.17;     // sheet along the bottom
+          else oy = c.h * 0.28;                   // sheet in the middle
         }
-        return {
-          x: m.world.x - c.w / 2 - ox,
-          y: m.world.y - c.h / 2 + NH.LEVELS * L * 0.62 - oy
-        };
+        camWant.x = m.world.x - c.w / 2 - ox;
+        camWant.y = m.world.y - c.h / 2 + NH.LEVELS * L * 0.62 - oy;
+        return camWant;
       }
     }
-    /* Mid-height terrain is the common case, so leaning the
-       camera by that much keeps the plane near the middle of the
-       screen instead of riding the top edge. */
+    /* Terrain of a middle height is the usual case. This offset
+       keeps the plane near the middle of the screen. Without it,
+       the plane goes to the top edge. */
     let ax = 0, ay = 0;
-    if (NH.cfg.get('camera') === 'lead') {
-      /* Look where you are going: push the view ahead along the
-         heading so there is more map in front of the nose than
-         behind the tail. */
+    if (NH.cfg.v.camera === 'lead') {
+      /* Look where you go. Put the view in front of the nose. */
       ax = Math.cos(state.heading) * LOOK_AHEAD;
       ay = Math.sin(state.heading) * LOOK_AHEAD;
     }
-    return {
-      x: state.pos.x - c.w / 2 + ax,
-      y: state.pos.y - c.h / 2 + (14 + NH.HOVER) * L + ay
-    };
+    camWant.x = state.pos.x - c.w / 2 + ax;
+    camWant.y = state.pos.y - c.h / 2 + (14 + NH.HOVER) * L + ay;
+    return camWant;
   }
 
-  /* How hard the camera chases its target, per control mode. */
+  /* How quickly the camera follows its target. */
   function camStiffness() {
     if (state.mode === 'orbit') return 3.2;
-    return NH.cfg.get('camera') === 'lazy' ? 2.4 : 6.5;
+    return NH.cfg.v.camera === 'lazy' ? 2.4 : 6.5;
   }
 
+  /* The trail is a fixed set of points. The loop writes into
+     them. The list does not grow, and it does not get shorter. A
+     point with a life of 0 or less is off. */
   function pushTrail(dt) {
+    const trail = state.trail;
+    for (let i = 0; i < trail.length; i++) trail[i].life -= dt * 0.85;
+
     state.trailClock += dt;
-    for (let i = 0; i < state.trail.length; i++) state.trail[i].life -= dt * 0.85;
-    while (state.trail.length && state.trail[state.trail.length - 1].life <= 0) state.trail.pop();
-    if (state.trailClock >= TRAIL_EVERY) {
-      state.trailClock = 0;
-      state.trail.unshift({ x: state.pos.x, y: state.pos.y, life: 1 });
-      if (state.trail.length > NH.World.trailSlots) state.trail.length = NH.World.trailSlots;
+    if (state.trailClock < TRAIL_EVERY) return;
+    state.trailClock = 0;
+
+    /* Move each point back one slot. Then write the new point
+       into the front. The list holds ten points, so this costs
+       less than a new object for each point. */
+    for (let i = trail.length - 1; i > 0; i--) {
+      trail[i].x = trail[i - 1].x;
+      trail[i].y = trail[i - 1].y;
+      trail[i].life = trail[i - 1].life;
     }
+    trail[0].x = state.pos.x;
+    trail[0].y = state.pos.y;
+    trail[0].life = 1;
   }
 
   function arrive(mark) {
@@ -159,8 +184,8 @@ NH.Flight = (function () {
     NH.emit('heading-to', id);
   }
 
-  /* Drop the plane straight onto a landmark — used for deep links,
-     where flying in from off-screen would just look like a bug. */
+  /* Put the plane on a beacon immediately. A direct link uses
+     this. A flight from off the screen would look like a fault. */
   function placeAt(id) {
     const m = markById(id);
     if (!m) return;
@@ -187,9 +212,9 @@ NH.Flight = (function () {
     const d = angleDelta(state.heading, want);
     const rate = TURN * dt;
     state.heading += Math.max(-rate, Math.min(rate, d));
-    /* Boosting near the goal would make the turn circle wider
-       than the arrival radius, and the plane would loop around
-       the landmark forever without ever landing on it. */
+    /* Do not increase the speed near the goal. The turn circle
+       would then be wider than the arrival radius. The plane
+       would go round the beacon and never reach it. */
     return dist > 160 && allowBoost ? BOOST : 1;
   }
 
@@ -213,9 +238,9 @@ NH.Flight = (function () {
 
       if (manual) {
         state.auto = null;
-        if (NH.cfg.get('control') === 'direct' && !pointerHeld) {
-          /* 8-way: build a velocity from the keys and let the nose
-             swing round to match it. */
+        if (NH.cfg.v.control === 'direct' && !pointerHeld) {
+          /* Eight directions. Make a velocity from the keys. The
+             nose then turns to that direction. */
           let vx = 0, vy = 0;
           if (keys.ArrowLeft || keys.a) vx -= 1;
           if (keys.ArrowRight || keys.d) vx += 1;
@@ -238,15 +263,16 @@ NH.Flight = (function () {
       } else if (state.auto) {
         const m = markById(state.auto);
         if (m) speedMul = steerToward(m.world, dt, true);
-      } else if (NH.cfg.get('control') === 'chase' && pointer) {
+      } else if (NH.cfg.v.control === 'chase' && pointer) {
         const w = pointerWorld();
         if (w) speedMul = steerToward(w, dt, true);
       } else if (boosting()) {
         speedMul = BOOST;
       }
 
-      /* Soft boundary: past RANGE the plane is nudged back so you
-         can never lose the landmarks in an endless noise field. */
+      /* A soft edge. Past RANGE the map turns the plane back.
+         Thus you cannot lose the beacons in an endless field of
+         noise. */
       const far = Math.hypot(state.pos.x, state.pos.y);
       if (far > RANGE) {
         const home = Math.atan2(-state.pos.y, -state.pos.x);
@@ -258,7 +284,7 @@ NH.Flight = (function () {
       state.pos.x += Math.cos(state.heading) * v * dt;
       state.pos.y += Math.sin(state.heading) * v * dt;
 
-      // arrival / re-arming
+      // arrival, and the release of a beacon after a departure
       for (let i = 0; i < NH.MARKS.length; i++) {
         const m = NH.MARKS[i];
         const dist = Math.hypot(state.pos.x - m.world.x, state.pos.y - m.world.y);
@@ -270,10 +296,12 @@ NH.Flight = (function () {
       }
     }
 
-    /* Roll into the turn. A real paper plane banks, and the wing
-       it drops is foreshortened — the shader narrows the shape by
-       cos(bank), which is what sells the turn as a turn rather
-       than a spin on the spot. Smoothed, or it would snap. */
+    /* Roll into the turn. A real paper plane rolls, and the
+       lower wing then looks shorter. The shader makes the shape
+       more narrow by cos(roll).
+
+       Thus the turn looks like a turn, and not like a spin on the
+       spot. The value changes slowly, or the plane would jump. */
     const turnRate = dt > 0 ? angleDelta(headingWas, state.heading) / dt : 0;
     const wantBank = NH.util.clamp(turnRate * 0.45, -1.05, 1.05);
     state.bank += (wantBank - state.bank) * (1 - Math.exp(-7.0 * dt));
@@ -291,14 +319,18 @@ NH.Flight = (function () {
     }
   }
 
-  /* Project a world position to CSS pixels, for the DOM overlays.
-     `liftLevels` is how far up the thing is drawn, in levels. */
+  /* Put a world position into CSS pixels, for the overlays in the
+     DOM. The value `liftLevels` gives the lift of the item, in
+     levels. The result goes into one object that this file keeps.
+     Read the result before you call this function again. */
+  const projected = { x: 0, y: 0 };
+
   function project(world, liftLevels) {
     const c = NH.World.cells;
-    const L = lift();
-    const cx = world.x - state.cam.x;
-    const cy = world.y - state.cam.y + (liftLevels || 0) * L;
-    return { x: cx * c.pixel, y: (c.h - cy) * c.pixel, cellX: cx, cellY: cy };
+    const cy = world.y - state.cam.y + (liftLevels || 0) * lift();
+    projected.x = (world.x - state.cam.x) * c.pixel;
+    projected.y = (c.h - cy) * c.pixel;
+    return projected;
   }
 
   function bind(canvas) {
@@ -306,7 +338,7 @@ NH.Flight = (function () {
       keys[e.key] = true;
       if (e.key === 'Shift') keys.Shift = true;
       if (!typing() && [' ', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].indexOf(e.key) >= 0) {
-        e.preventDefault();     // stop the page from scrolling under the canvas
+        e.preventDefault();     // hold the page still below the canvas
       }
     });
     window.addEventListener('keyup', function (e) {
@@ -331,7 +363,7 @@ NH.Flight = (function () {
     canvas.addEventListener('pointercancel', release);
     canvas.addEventListener('pointerleave', function () {
       pointerHeld = false;
-      if (NH.cfg.get('control') !== 'chase') pointer = null;
+      if (NH.cfg.v.control !== 'chase') pointer = null;
     });
   }
 
@@ -343,7 +375,6 @@ NH.Flight = (function () {
     flyTo: flyTo,
     placeAt: placeAt,
     depart: depart,
-    markById: markById,
-    get keys() { return keys; }
+    markById: markById
   };
 })();

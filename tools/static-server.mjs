@@ -1,6 +1,6 @@
-/* A static file server small enough not to be a dependency.
-   Shared by `npm start`, the test suite and the card renderer, so
-   all three serve the site exactly the same way. */
+/* A small server for static files. It is small enough to not be a
+   dependency. `npm start`, the tests and the card tool all use it.
+   Thus all three serve the site in the same way. */
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
@@ -15,9 +15,9 @@ const TYPES = {
 export function startServer(port = 8743, root = process.cwd()) {
   const server = createServer(async (req, res) => {
     const url = decodeURIComponent(req.url.split('?')[0]);
-    /* Strip any leading ../ before joining, then check the result
-       is still inside the root — a served directory should not be
-       a way out of it. */
+    /* First remove each ../ at the start of the path. Then make
+       sure that the result is still in the root. A directory must
+       not give a path to a file above it. */
     const rel = normalize(url === '/' ? '/index.html' : url).replace(/^(\.\.[/\\])+/, '');
     const file = join(root, rel);
     if (!file.startsWith(root) || !existsSync(file)) {

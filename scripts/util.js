@@ -1,10 +1,9 @@
-/* ============================================================
-   util.js — the handful of helpers more than one file needs.
-   ============================================================ */
+/* util.js — the helpers that more than one file needs. */
 window.NH = window.NH || {};
 
 NH.util = {
-  /* Shortest signed way round from angle a to angle b. */
+  /* The shortest turn from angle a to angle b. The sign gives the
+     direction of the turn. */
   angleDelta: function (a, b) {
     let d = (b - a) % (Math.PI * 2);
     if (d > Math.PI) d -= Math.PI * 2;
@@ -14,9 +13,9 @@ NH.util = {
 
   clamp: function (v, lo, hi) { return v < lo ? lo : v > hi ? hi : v; },
 
-  /* True while the caret is in a text field. Every keyboard
-     handler on the page has to check this first, or typing "add"
-     into the project filter banks the plane into the sea. */
+  /* True when the caret is in a text field. Every key handler on
+     the page must test this first. If it does not, the letters
+     that you put in the project filter also turn the plane. */
   typing: function () {
     const el = document.activeElement;
     if (!el) return false;

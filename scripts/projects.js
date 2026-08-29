@@ -1,13 +1,13 @@
-/* ============================================================
-   projects.js — the Projects beacon's contents.
+/* projects.js — the content of the Projects beacon.
 
-   Two versions of the same list, switchable in dev mode:
-   "Live" reads the GitHub API in the browser, "Static" uses the
-   copy bundled in content.js. Live is the default but it is
-   never load-bearing: anonymous GitHub requests are capped at 60
-   an hour per IP, so any failure quietly falls back to the
-   bundled list rather than showing an empty page.
-   ============================================================ */
+   There are two versions of the same list. Dev mode selects one of
+   them. Live reads the GitHub API in the browser. Static uses the
+   copy in content.js.
+
+   Live is the default, but the page never depends on it. GitHub
+   permits only 60 requests an hour for each address without a key.
+   After a failure the page shows the copy from content.js. It does
+   not show an empty list. */
 window.NH = window.NH || {};
 
 NH.Projects = (function () {
@@ -46,8 +46,8 @@ NH.Projects = (function () {
   function normalise(repos) {
     return repos
       .filter(function (r) {
-        /* The profile repo only holds the README shown on the
-           GitHub profile page — it is not a project. */
+        /* The profile repository holds only the README for the
+           GitHub profile page. It is not a project. */
         return !r.fork && r.name !== NH.GITHUB_USER;
       })
       .map(function (r) {
@@ -76,8 +76,8 @@ NH.Projects = (function () {
                 '/repos?per_page=100&sort=updated';
     loaded = fetch(url, { headers: { Accept: 'application/vnd.github+json' } })
       .then(function (res) {
-        /* 403 here is almost always the anonymous rate limit rather
-           than a real failure, and it is worth saying which. */
+        /* A 403 is almost always the request limit, and not a
+           true failure. Tell the person which one it is. */
         if (res.status === 403 || res.status === 429) throw new Error('GitHub rate limit');
         if (!res.ok) throw new Error('GitHub responded ' + res.status);
         return res.json();
@@ -90,7 +90,7 @@ NH.Projects = (function () {
         return { items: list, source: 'GitHub API, live' };
       })
       .catch(function (err) {
-        loaded = null;   // let a later attempt retry
+        loaded = null;   // a later call can try again
         const why = /rate limit/.test(err.message) ? err.message : 'GitHub unreachable';
         return { items: NH.PROJECTS_STATIC, source: 'bundled list, ' + why };
       });
@@ -166,9 +166,9 @@ NH.Projects = (function () {
     });
   }
 
-  /* Built once, then only the pressed state changes — rebuilding
-     the buttons on every sort would throw away the listeners and
-     the focus along with them. */
+  /* Make the buttons one time. After that, only the pressed state
+     changes. If you make the buttons again for each sort, you also
+     remove their listeners and the focus. */
   function buildSorts() {
     const box = document.getElementById('proj-sort');
     if (!box || box.childElementCount) return;
@@ -206,7 +206,7 @@ NH.Projects = (function () {
   /* Called whenever the Projects sheet opens, and whenever the
      source variant changes. */
   function refresh() {
-    if (NH.cfg.get('projects') === 'static') {
+    if (NH.cfg.v.projects === 'static') {
       items = NH.PROJECTS_STATIC;
       source = 'bundled list';
       render();
@@ -214,7 +214,7 @@ NH.Projects = (function () {
     }
     render();                       // paint the fallback immediately
     fetchLive().then(function (r) {
-      if (NH.cfg.get('projects') !== 'live') return;   // switched away mid-flight
+      if (NH.cfg.v.projects !== 'live') return;   // switched away mid-flight
       items = r.items;
       source = r.source;
       render();

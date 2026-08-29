@@ -1,13 +1,14 @@
-/* Renders og.png, the social card, from the site itself — so the
-   preview is always the real thing rather than a drawing of it.
+/* This tool makes og.png, the preview card, from the site. Thus
+   the preview always shows the real page.
 
      node tools/og.mjs
 
-   Frames the Start beacon on the right and the plane banking in
-   from the lower left. The summit's drawn height is exactly
-   LEVELS * lift above its map position, which is what makes the
-   composition repeatable without any guessing.
-*/
+   The frame puts the Start beacon at the right. The plane comes in
+   from the lower left, and it rolls into its turn.
+
+   The site draws each summit at exactly LEVELS * lift cells above
+   its map position. This tool knows that number. So it gives the
+   same frame every time. */
 import { chromium } from 'playwright';
 import { startServer } from './static-server.mjs';
 
@@ -28,7 +29,7 @@ await page.evaluate(() => {
   NH.cfg.reset();
   const st = NH.Flight.state;
   const W = NH.World.cells.w, H = NH.World.cells.h;
-  const lift = NH.cfg.get('lift');
+  const lift = NH.cfg.v.lift;
   const camX = 0 - W * 0.72;
   const camY = (-173 + NH.LEVELS * lift) - H * 0.70;
   NH.Flight.update = function () { st.cam.x = camX; st.cam.y = camY; };
@@ -37,14 +38,12 @@ await page.evaluate(() => {
   st.pos.y = camY + H * 0.03;
   st.heading = 0.42;
   st.bank = -0.5;
-  st.trail.length = 0;
-  for (let i = 1; i < 10; i++) {
-    st.trail.push({
-      x: st.pos.x - Math.cos(st.heading) * i * 7,
-      y: st.pos.y - Math.sin(st.heading) * i * 7,
-      life: 1 - i / 11
-    });
-  }
+  /* The trail is a fixed set of slots, so write into them. */
+  st.trail.forEach((t, i) => {
+    t.x = st.pos.x - Math.cos(st.heading) * i * 7;
+    t.y = st.pos.y - Math.sin(st.heading) * i * 7;
+    t.life = 1 - i / 11;
+  });
   document.getElementById('panel').hidden = true;
   ['hud', 'hint', 'quicknav', 'devchip', 'labels'].forEach(id => {
     document.getElementById(id).style.display = 'none';

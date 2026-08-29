@@ -1,18 +1,22 @@
-/* ============================================================
-   tools/verify.mjs — the browser test suite.
+/* tools/verify.mjs — the browser tests.
 
-   Drives a real Chromium against a local copy of the site and
-   asserts the things that are easy to break and hard to notice:
-   that the world renders at all, that flying somewhere opens the
-   right sheet, that every variant compiles AND draws something
-   different from its neighbours, and that no combination throws.
+   This tool drives a real Chromium against a local copy of the
+   site. It tests the parts that break easily, and that a person
+   does not see quickly:
 
-     node tools/verify.mjs            # serves . on :8743 itself
-     node tools/verify.mjs --keep     # keep the screenshots
+   - The world draws.
+   - A flight to a beacon opens the correct sheet.
+   - Each option compiles, and it draws a different picture from
+     its neighbours.
+   - No group of options causes an error.
+
+   Use one of these commands:
+
+     node tools/verify.mjs            # serves this directory
+     node tools/verify.mjs --keep     # keeps the screenshots
      BASE=http://host/ node tools/verify.mjs
 
-   Screenshots land in .verify-shots/ (git-ignored).
-   ============================================================ */
+   The screenshots go into .verify-shots/, which git ignores. */
 import { chromium } from 'playwright';
 import { mkdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -32,9 +36,10 @@ function section(n, title) { console.log('\n[' + n + '] ' + title); }
 
 const BASE = process.env.BASE || `http://127.0.0.1:${PORT}/index.html`;
 
-/* The stub keeps the GitHub-backed path deterministic and offline:
-   two real repos, one fork and the profile repo, so the filtering
-   is exercised rather than assumed. */
+/* This list keeps the GitHub path the same on each run, and it
+   needs no network. It holds two real repositories, one fork and
+   the profile repository. Thus the tests use the filter, and they
+   do not assume that it works. */
 const GITHUB_STUB = [
   { name: 'noc-examples-pygame', description: 'stubbed live entry', language: 'Python',
     stargazers_count: 16, html_url: 'https://github.com/Hohnik/noc-examples-pygame',
@@ -53,7 +58,8 @@ const GITHUB_STUB = [
 async function open(browser, opts = {}) {
   const { noStub, ...ctxOpts } = opts;
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 }, ...ctxOpts });
-  /* readPixels outside a frame needs the drawing buffer kept. */
+  /* A call to readPixels outside a frame needs the draw buffer.
+     So ask the browser to keep it. */
   await ctx.addInitScript(() => {
     const orig = HTMLCanvasElement.prototype.getContext;
     HTMLCanvasElement.prototype.getContext = function (type, attrs) {
@@ -68,9 +74,13 @@ async function open(browser, opts = {}) {
   page.on('console', m => { if (m.type() === 'error') errors.push('console: ' + m.text()); });
   page.on('pageerror', e => errors.push('pageerror: ' + e.message));
   page.on('requestfailed', r => {
-    if (!r.url().includes('api.github.com')) {
-      errors.push('requestfailed: ' + r.url() + ' ' + (r.failure() || {}).errorText);
-    }
+    const why = (r.failure() || {}).errorText || '';
+    /* ERR_ABORTED shows that the browser stopped a request,
+       because the page went to a different address. The tests go
+       to a different address on purpose. So a font that was still
+       on its way is not a failure. */
+    if (r.url().includes('api.github.com') || why.includes('ERR_ABORTED')) return;
+    errors.push('requestfailed: ' + r.url() + ' ' + why);
   });
   if (!noStub) {
     await page.route('**://api.github.com/**', route => route.fulfill({
@@ -81,10 +91,9 @@ async function open(browser, opts = {}) {
   return { ctx, page };
 }
 
-/* A cheap fingerprint of what is actually on the canvas: how many
-   distinct colours, plus a checksum over a sampled grid. Two
-   variants that produce the same number are not different
-   variants. */
+/* A cheap mark of the picture on the canvas. It gives the number
+   of different colours and a checksum of a grid of samples. Two
+   options with the same mark are not two different options. */
 const fingerprint = page => page.evaluate(() => {
   const c = document.getElementById('world');
   const gl = c.getContext('webgl');
@@ -343,7 +352,7 @@ async function main() {
   check('a look round-trips', codec.roundTrip && codec.differs);
   check('a malformed look is rejected', codec.rejects);
 
-  // a download really is produced
+  // the button gives a real file
   const dl = page.waitForEvent('download', { timeout: 8000 }).catch(() => null);
   await page.click('.dev-action >> nth=3');       // Save PNG
   const file = await dl;
@@ -585,9 +594,10 @@ async function main() {
   });
   console.log('       ' + flying + ' fps flying, ' + orbiting + ' fps settled (software rasteriser)');
   console.log('       terrain passes re-run on ' + cache.ran + ' of ' + cache.frames + ' settled frames');
-  /* SwiftShader is a CPU rasteriser on a shared core: these are
-     floors, not what real hardware does. Worth asserting only so
-     a change that makes the frame far more expensive fails. */
+  /* SwiftShader is a CPU rasteriser on a shared core. These
+     numbers are a minimum. Real hardware is much faster. The test
+     is here only to catch a change that makes the frame much more
+     expensive. */
   check('renders at a usable rate even in software', flying >= 12, flying + ' fps');
   check('terrain passes are skipped once the camera settles',
         cache.frames > 10 && cache.ran / cache.frames < 0.2,

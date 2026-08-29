@@ -1,19 +1,18 @@
-/* ============================================================
-   config.js — the feature registry.
+/* config.js — the registry of settings.
 
-   Every part of the site that exists in more than one version is
-   declared here once. The dev bar renders itself from this list,
-   the renderer reads values from it, and nothing else needs to
-   know which variants exist. Adding a variant means adding an
-   entry to `options` — no other file changes.
-   ============================================================ */
+   This file declares each part of the site that has more than one
+   option. The dev bar draws itself from this list. The renderer
+   reads the values from it. No other file must know the options.
+
+   To add an option, add one entry to `options` here. You do not
+   change another file. */
 window.NH = window.NH || {};
 
 const STORE_KEY = 'nh.dev.v3';
 
-/* type 'cycle': click steps through options, each {label, value}.
-   type 'toggle': a switch, value is the boolean itself.
-   `group` decides which cluster of the dev bar it lands in. */
+/* A `cycle` steps through its options. Each option has a label
+   and a value. A `toggle` is a switch, and its value is the
+   boolean. The `group` selects the part of the dev bar. */
 NH.GROUPS = [
   { id: 'world',  label: 'World' },
   { id: 'look',   label: 'Look' },
@@ -131,9 +130,9 @@ NH.FEATURES = [
     hint: 'Frame counter and cell grid size' }
 ];
 
-/* Whole looks, applied in one click. Each names only the settings
-   it actually cares about; everything else stays where it is, so
-   a preset is a starting point rather than a reset. */
+/* A complete look, in one click. Each preset names only the
+   settings that it needs. The other settings do not change. Thus a
+   preset gives you a place to start, and it is not a reset. */
 NH.PRESETS = [
   { name: 'Paper',   set: { palette: 0, ink: 1, light: 1, water: 1, marker: 1, panel: 0, clouds: false, fog: false } },
   { name: 'Topo',    set: { palette: 3, ink: 2, light: 1, water: 2, marker: 0, panel: 0, terrain: 0, clouds: false } },
@@ -152,8 +151,23 @@ NH.emit = function (event, arg) { (listeners[event] || []).forEach(function (fn)
 const byKey = {};
 NH.FEATURES.forEach(function (f) { byKey[f.key] = f; });
 
+/* Index of the selected option, per feature. */
 const state = {};
 NH.FEATURES.forEach(function (f) { state[f.key] = f.def; });
+
+/* The values, after this file resolves them. A cycle gives the
+   value of the selected option. A toggle gives the boolean.
+
+   The frame loop reads these 30 times in each frame. So they are a
+   plain object, and it changes only after a setting changes. A
+   read of NH.cfg.v.palette is one property read. */
+NH.cfg = { v: {} };
+
+function resolve() {
+  NH.FEATURES.forEach(function (f) {
+    NH.cfg.v[f.key] = f.type === 'toggle' ? state[f.key] : f.options[state[f.key]].value;
+  });
+}
 
 function load() {
   let saved;
@@ -165,22 +179,24 @@ function load() {
     if (f.type === 'cycle' && Number.isInteger(v) && v >= 0 && v < f.options.length) state[f.key] = v;
   });
 }
+
 function save() {
   try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch (e) { /* private mode */ }
 }
 
-NH.cfg = {
-  /* The resolved value: the option's `value` for cycles, the
-     boolean for toggles. Callers never see indexes. */
-  get: function (key) {
-    const f = byKey[key];
-    return f.type === 'toggle' ? state[key] : f.options[state[key]].value;
-  },
+/* Every write goes through here: it keeps the resolved values, the
+   stored copy and the listeners in step. */
+function commit(key) {
+  resolve();
+  save();
+  NH.emit('config', key);
+}
+
+Object.assign(NH.cfg, {
   label: function (key) {
     const f = byKey[key];
     return f.type === 'toggle' ? (state[key] ? 'On' : 'Off') : f.options[state[key]].label;
   },
-  index: function (key) { return state[key]; },
   feature: function (key) { return byKey[key]; },
 
   set: function (key, index, quiet) {
@@ -188,35 +204,52 @@ NH.cfg = {
     if (!f) return;
     state[key] = f.type === 'toggle' ? !!index
       : ((index % f.options.length) + f.options.length) % f.options.length;
-    if (!quiet) { save(); NH.emit('config', key); }
+    if (quiet) resolve();
+    else commit(key);
   },
+
   step: function (key, dir) {
     const f = byKey[key];
     if (f.type === 'toggle') NH.cfg.set(key, !state[key]);
     else NH.cfg.set(key, state[key] + (dir || 1));
   },
-  /* Several keys at once, with a single notification — otherwise
-     applying a preset would rebuild the renderer six times. */
+
+  /* Many keys, one notification. A preset that emitted per key
+     would rebuild the renderer six times. */
   apply: function (obj) {
     Object.keys(obj).forEach(function (k) { NH.cfg.set(k, obj[k], true); });
-    save();
-    NH.emit('config', '*');
+    commit('*');
   },
+
   reset: function () {
     NH.FEATURES.forEach(function (f) { state[f.key] = f.def; });
-    save();
-    NH.emit('config', '*');
+    commit('*');
   },
-  /* ---- shareable looks ----
-     One base-36 character per feature, in registry order, behind a
-     version digit. Short enough to paste into a message, and the
-     length check means a link made before a feature was added is
-     rejected rather than silently applied to the wrong settings. */
+
+  randomise: function () {
+    NH.FEATURES.forEach(function (f) {
+      /* Two settings do not change. A random data source, or
+         labels that you cannot see, give a worse page. They do not
+         give a different page. */
+      if (f.key === 'projects' || f.key === 'labels') return;
+      state[f.key] = f.type === 'toggle'
+        ? Math.random() < 0.5
+        : Math.floor(Math.random() * f.options.length);
+    });
+    commit('*');
+  },
+
+  /* ---- a link that holds a look ----
+     One base-36 character for each setting, in the order of the
+     registry, after a version digit. The string is short enough
+     for a message. The length test refuses a link that a person
+     made before you added a setting. */
   encode: function () {
     return '1' + NH.FEATURES.map(function (f) {
       return (f.type === 'toggle' ? (state[f.key] ? 1 : 0) : state[f.key]).toString(36);
     }).join('');
   },
+
   decode: function (str) {
     if (typeof str !== 'string' || str.charAt(0) !== '1') return false;
     const body = str.slice(1);
@@ -230,24 +263,10 @@ NH.cfg = {
       else { if (v >= f.options.length) return false; next[f.key] = v; }
     }
     Object.keys(next).forEach(function (k) { state[k] = next[k]; });
-    save();
-    NH.emit('config', '*');
+    commit('*');
     return true;
-  },
-
-  randomise: function () {
-    NH.FEATURES.forEach(function (f) {
-      /* Leave the two that are about how the page behaves rather
-         than how it looks: rolling a random data source or hiding
-         the labels is a worse page, not a different one. */
-      if (f.key === 'projects' || f.key === 'labels') return;
-      state[f.key] = f.type === 'toggle'
-        ? Math.random() < 0.5
-        : Math.floor(Math.random() * f.options.length);
-    });
-    save();
-    NH.emit('config', '*');
   }
-};
+});
 
 load();
+resolve();

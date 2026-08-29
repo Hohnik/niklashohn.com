@@ -1,37 +1,40 @@
-/* ============================================================
-   shaders.js — all GLSL for the world, as plain strings.
+/* shaders.js — all the GLSL for the world, as plain strings.
 
-   THREE PASSES.
+   There are three passes.
 
-   1 "height"  — one fragment per map cell, writes that cell's
-                 terrain LEVEL into a texture. The noise is
-                 therefore evaluated exactly once per cell.
-   2 "visible" — resolves the fake perspective: which stacked
-                 layer shows at each screen cell. Reads pass 1.
-   3 "shade"   — the picture. Reads pass 2 for the terrain and
-                 pass 1 for anything standing at a known map
-                 position: the plane, its shadow, the trail, the
-                 landmarks.
+   Pass 1, height. It draws one fragment for each map cell. It
+   writes the terrain level of that cell into a texture. Thus the
+   shader calculates the noise one time for each cell.
 
-   The split is what makes it cheap. The layer search costs ~30
-   lookups per cell and the answer is needed three times per
-   pixel to find the contour edges; resolving it once into a
-   texture and reading two neighbours back is a third of the work
-   of searching three times, and unlike a derivative trick it is
-   exact — the neighbour really is the neighbouring cell.
-   ============================================================ */
+   Pass 2, visible. It finds the false perspective. For each
+   screen cell it finds the layer that you see. It reads pass 1.
+
+   Pass 3, shade. It draws the picture. It reads pass 2 for the
+   terrain. It reads pass 1 for each item at a known map position:
+   the plane, its shadow, the trail and the beacons.
+
+   The three passes make the frame cheap. The layer search needs
+   about 30 texture reads for each cell. Pass 3 needs that answer
+   three times for each pixel, because it must also look at two
+   neighbour cells to find the contour edges.
+
+   One search for each cell, plus two texture reads, costs one
+   third of three searches. It is also exact. A trick with the
+   derivative functions is not exact. */
 window.NH = window.NH || {};
 
-/* Levels of the terrain staircase. Also the loop bound in the
-   layer search, so it has to be a compile-time constant. */
+/* The number of levels in the terrain. The layer search also uses
+   this number as its loop limit. So it must be a constant that
+   the compiler knows. */
 NH.LEVELS = 28;
-/* Everything at or below this level is flooded and flat. */
+/* Water covers each level at or below this one. Water is flat. */
 NH.SEA = 9;
-/* The height texture holds extra rows BELOW the screen, because
-   the layer search looks down by LEVELS * lift cells. How many is
-   decided at resize time from the current lift — see world.js. */
+/* The height texture holds more rows below the screen. The layer
+   search looks down by LEVELS * lift cells. The resize step in
+   world.js sets the number of rows from the current lift. */
 
-/* Shared by every pass: value noise on an integer lattice. */
+/* All three passes use this value noise on a whole-number
+   lattice. */
 const NOISE_GLSL = `
 float hash(vec2 p) {
     return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
@@ -52,20 +55,20 @@ attribute vec2 a_pos;
 void main() { gl_Position = vec4(a_pos, 0.0, 1.0); }
 `;
 
-/* ------------------------------------------------------------
-   PASS 1 — the height field.
+/* PASS 1 — the height field.
 
-   Five generators, all landing in 0..1 before quantisation, then
-   one shared finish: flood below the sea line, and raise a cone
-   under every landmark.
+   Five generators give a value from 0.0 to 1.0. Then two steps
+   are the same for all five. Water covers the levels below the
+   sea line. A cone lifts the terrain below each beacon.
 
-   The cone reaches exactly 1.0 at its centre, so the level at a
-   landmark is ALWAYS exactly LEVELS whatever the noise does
-   there. That is what lets JavaScript place the floating labels
-   without ever recomputing the noise — it already knows the
-   answer — and it guarantees every landmark is a mountain you can
-   spot from across the map, which is the whole navigation system.
-   ------------------------------------------------------------ */
+   The cone reaches exactly 1.0 at its centre. So the level at a
+   beacon is always exactly LEVELS, whatever the noise gives
+   there.
+
+   That fact has two results. JavaScript knows the height of each
+   summit, so it can put the labels there. It does not calculate
+   the noise again. And each beacon always has a mountain that you
+   see from a distance, which is how a person finds it. */
 NH.FRAG_HEIGHT = `
 precision highp float;
 
@@ -90,8 +93,8 @@ float fbm(vec2 p) {
     return h;
 }
 
-/* Ridged multifractal: fold each octave around its midpoint so
-   the peaks come to a crease instead of a dome. */
+/* A ridged multifractal. Fold each octave at its middle value.
+   The peaks then come to a sharp line, and not to a dome. */
 float ridged(vec2 p) {
     float h = 0.0, a = 0.5;
     for (int i = 0; i < 4; i++) {
@@ -105,83 +108,84 @@ float terrainAt(vec2 w) {
     vec2 p = w * u_scale + u_seed;
 
     if (u_terrain == 1) {                    // Ridged — alpine spines
-        /* Value noise sits close to 0.5, so 1 - |2n-1| sits close
-           to 1 and a ridged sum lands around 0.71 with a much
-           tighter spread than plain fbm. Stretching it over fbm's
-           window would put the whole map above the snow line. */
+        /* Value noise stays close to 0.5. Thus 1 - |2n-1| stays
+           close to 1.0, and a ridged sum is about 0.71. The
+           spread is much smaller than the spread of plain fbm.
+
+           The window of fbm is therefore wrong here. It would put
+           the whole map above the snow line. */
         return smoothstep(0.60, 0.94, ridged(p));
     }
     if (u_terrain == 2) {                    // Dunes — domain warped
-        /* Feeding fbm its own output as a coordinate offset drags
-           the whole field sideways by an amount that itself
-           varies, which turns round hills into long combed
-           ridges. */
+        /* Give fbm its own output as a coordinate offset. The
+           field then moves sideways, and the distance changes
+           from place to place. Round hills become long ridges. */
         vec2 q = vec2(fbm(p + 1.7), fbm(p + 9.2));
         return smoothstep(0.26, 0.70, fbm(p + 2.6 * q));
     }
     if (u_terrain == 3) {                    // Archipelago
-        /* A second, much slower noise decides where land is
-           allowed at all, so the map breaks into island clusters
-           with real open water between them. */
+        /* A second, much slower noise selects where land can be.
+           The map then breaks into groups of islands with open
+           water between them. */
         float mask = smoothstep(0.38, 0.66, fbm(p * 0.34 + 77.0));
         return smoothstep(0.28, 0.72, fbm(p)) * mask;
     }
     if (u_terrain == 4) {                    // Plateaus — mesas
-        /* Quantise before the level quantisation and the terrain
-           gains wide flat tops with sheer sides between them.
-
-           Land each step on the MIDDLE of its band, not its edge:
-           a plateau sitting exactly on a level boundary makes
-           neighbouring cells flip between two levels and the mesa
-           comes out hatched. Keeping a quarter of the original
-           slope gives the tops a little texture without bringing
-           the ties back. */
+        /* Cut the height into bands before the shader cuts it
+           into levels. The terrain then has wide flat tops with
+           steep sides between them. */
         float h = smoothstep(0.26, 0.74, fbm(p));
         float g = h * 8.0, k = floor(g);
-        /* Each band is flat for its first two thirds, then ramps
-           quickly to the next. The 0.18 offset is what keeps the
-           flat tops off a level boundary: land a mesa exactly on
-           one and neighbouring cells flip between two levels, and
-           the whole plateau comes out hatched. Eight bands at that
-           offset put every top on a .13 or .63, safely clear. */
+        /* Each band is flat for its first two thirds. Then it
+           rises quickly to the next band.
+
+           The offset of 0.18 keeps each flat top away from a
+           level boundary. A flat top exactly on a boundary makes
+           neighbour cells move between two levels. The plateau
+           then shows a pattern of lines.
+
+           Eight bands at this offset put each top at .13 or .63
+           of a level. That distance is safe. */
         return (k + 0.18 + 0.82 * smoothstep(0.60, 0.95, fract(g))) / 8.0;
     }
-    /* Rolling: raw fbm crowds around the middle, so without the
-       stretch almost every cell lands on the same three levels
-       and the map is flat porridge. */
+    /* Rolling. Plain fbm gives values close to the middle. The
+       stretch is necessary. Without it, almost every cell gets
+       one of the same three levels, and the map is flat. */
     return smoothstep(0.28, 0.72, fbm(p));
 }
 
-/* The landmark mountain: 1.0 across a flat summit, easing down to
-   0.0 at the rim so it melts into the surrounding terrain instead
-   of cutting a step into it.
+/* The mountain below a beacon. The value is 1.0 across a flat
+   summit. It then falls to 0.0 at the rim, so the mountain joins
+   the terrain around it. It does not cut a step into it.
 
-   PLATEAU is what keeps the summit readable. Without it the cone
-   runs all 28 levels down to a point and the contour lines pile
-   into a bullseye; with it the top is one clean snow field with
-   room for the beacon to stand on.
+   PLATEAU keeps the summit clear. Without it, the cone falls
+   through all 28 levels to a point, and the contour lines make a
+   target pattern. With it, the top is one clean snow field, and
+   the beacon has a place to stand.
 
-   m.z carries the marker's glow pulse, which is >= 0 whenever the
-   marker exists and -1 when it does not. Test against 0, not
-   against the pulse's midpoint, or the mountains blink in and out
-   in time with the beacon. */
+   The z part of m holds the pulse of the marker. The value is 0
+   or more when the marker exists. It is -1 when it does not.
+   Test against 0, and not against the middle of the pulse. If you
+   test against the middle, the mountains appear and go away with
+   the pulse. */
 const float PLATEAU = 0.12;
 
 float cone(vec2 w, vec3 m) {
     if (m.z < 0.0) return 0.0;
-    /* Warping the radius with slow noise turns a mathematically
-       perfect set of rings into something that reads as a
-       mountain. The warp is a multiplier, so the centre is still
-       exactly at distance 0 and still exactly at the top level —
-       which is what lets the labels be positioned without asking
-       the GPU anything.
+    /* Slow noise changes the radius. A set of exact circles
+       then becomes a shape that looks like a mountain. The noise
+       is a multiplier, so the centre stays at distance 0 and at
+       the top level. Thus JavaScript can still put the labels on
+       the summit without a question to the GPU.
 
-       Linear, not smoothstep, from there down. A smoothstep slope
-       is steepest at its middle, which crushes a third of the 28
-       levels into a narrow band and paints it solid with contour
-       lines. Linear spaces the terraces evenly all the way down;
-       the rim needs no easing because max() against the noise
-       already hides it wherever the terrain is higher. */
+       Below the summit the fall is linear, and not a smoothstep.
+       A smoothstep is steepest at its middle. It would put a
+       third of the 28 levels into a narrow band, and the contour
+       lines there would make a solid area.
+
+       A linear fall gives terraces of the same width. The rim
+       needs no curve, because max() against the noise already
+       hides the rim where the terrain is higher. */
     float d = length(w - m.xy) / u_markR;
     d *= 0.80 + 0.40 * vnoise(w * 0.013 + u_seed + 21.0);
     return clamp(1.0 - (d - PLATEAU) / (1.0 - PLATEAU), 0.0, 1.0);
@@ -196,37 +200,42 @@ void main() {
 
     float level = max(clamp(floor(h * LEVELS), 0.0, LEVELS), u_sea);
 
-    /* A second, unrelated slice of the same noise field decides
-       where forest grows. It is baked here rather than sampled in
-       the shading pass because it depends only on world position:
-       computing it here costs four sines once per cell and then
-       nothing at all while the camera holds still, instead of four
-       sines per pixel every single frame.
+    /* A second part of the same noise field selects where
+       forest grows. Pass 1 writes it here, and pass 3 does not
+       calculate it again. The mask depends only on the world
+       position.
 
-       R: the level, on an exact 8-bit step (/32) so the read back
-       in the later passes is lossless. G: the forest mask, where
-       eight bits is plenty for a threshold. */
+       This costs four sine calls one time for each cell. While
+       the camera holds still it costs nothing. In pass 3 it would
+       cost four sine calls for each pixel of each frame.
+
+       The red channel holds the level. The value is on an exact
+       8-bit step, so the later passes read it with no loss. The
+       green channel holds the forest mask. Eight bits are enough
+       for a threshold test. */
     float forest = vnoise(w * 0.045 + u_seed + 50.0);
     gl_FragColor = vec4(level / 32.0, forest, 0.0, 1.0);
 }
 `;
 
-/* ------------------------------------------------------------
-   PASS 2 — which layer is visible where.
+/* PASS 2 — the layer that you see at each screen cell.
 
-   FAKE PERSPECTIVE, asked backwards.
-   We want layer L drawn L*lift cells higher than the map says,
-   so the levels stack like paper cutouts seen from the front.
-   A fragment shader cannot move pixels, so instead of "where do
-   I go?" every pixel asks "who lands on ME?": layer L would have
-   come from L*lift cells below, so look there, and if the terrain
-   is at least L high, layer L covers this pixel. Search from the
-   top down and the first hit wins, because higher layers are in
-   front. Level 0 is everywhere, so the search always terminates.
+   This pass makes the false perspective. The site must draw layer
+   L at L * lift cells higher than the map says. The levels then
+   stack like cut paper that you look at from the front.
 
-   u_lift = 0 collapses this to a plain top-down map, which is
-   exactly the "Flat" view variant — no second code path needed.
-   ------------------------------------------------------------ */
+   A fragment shader can give itself a colour. It cannot move
+   itself. So each pixel asks a different question: which layer
+   lands on me?
+
+   Layer L comes from L * lift cells below. Look there. If the
+   terrain is L high or higher, layer L covers this pixel. Start
+   at the top and go down. The first hit wins, because a higher
+   layer is in front. Level 0 is everywhere, so the search always
+   stops.
+
+   A lift of 0 gives a plain map from above. That is the Flat view
+   option. It needs no second block of code. */
 NH.FRAG_VISIBLE = `
 precision highp float;
 
@@ -253,9 +262,7 @@ void main() {
 }
 `;
 
-/* ------------------------------------------------------------
-   PASS 3 — the picture.
-   ------------------------------------------------------------ */
+/* PASS 3 — the picture. */
 NH.FRAG_MAIN = `
 precision highp float;
 
@@ -277,7 +284,8 @@ uniform float u_clouds;
 uniform float u_fog;
 
 uniform vec3  u_plane;     // world xy + heading in radians
-uniform float u_bank;      // roll, in radians
+uniform vec2  u_planeRot;  // cos and sin of the heading, from the CPU
+uniform float u_bankScale; // 1 / cos(roll), from the CPU
 uniform float u_hover;     // levels the plane flies above the ground
 uniform float u_planeSize;
 uniform int   u_planeKind;
@@ -300,22 +308,23 @@ vec2 heightUV(vec2 cell) {
     return (vec2(cell.x, cell.y + u_pad) + 0.5) / u_texSize;
 }
 
-/* The flat terrain level at a map cell — for things that stand on
-   the ground at a position we already know. */
+/* The flat terrain level at a map cell. Use it for each item
+   that stands on the ground at a known position. */
 float levelAt(vec2 cell) {
     return floor(texture2D(u_height, heightUV(cell)).r * 32.0 + 0.5);
 }
 
-/* The stacked layer showing at a SCREEN cell, resolved by pass 2.
-   Reading one cell off the edge clamps, which is what we want at
-   the borders. */
+/* The layer that you see at a screen cell. Pass 2 found it. A
+   read one cell past the edge gives the edge value, which is
+   correct at the borders. */
 float visibleLayer(vec2 cell) {
     return floor(texture2D(u_visible, (cell + 0.5) / u_res).r * 32.0 + 0.5);
 }
 
 /* ---------------- palettes ----------------
-   Seven complete looks. u_palette is a uniform, so every fragment
-   takes the same branch — the GPU never actually diverges here. */
+   Seven complete looks. The value u_palette is a uniform. So each
+   fragment takes the same branch, and the GPU does not divide the
+   work here. */
 void paletteRamp(out vec3 wat, out vec3 low, out vec3 fst, out vec3 mid, out vec3 top) {
     if (u_palette == 1) {            // Dusk — the old site purple
         wat = vec3(0.19, 0.15, 0.36); low = vec3(0.45, 0.36, 0.68);
@@ -355,8 +364,8 @@ vec3 paletteFill(float h, float forest, bool water) {
     if (h > 0.55)      c = mid;      // tree line
     if (h > 0.80)      c = top;      // snow line
     if (water)         c = wat;
-    /* Without this ramp each material is one flat area and every
-       layer inside it becomes invisible. */
+    /* This ramp is necessary. Without it each material is one
+       flat area, and you cannot see the layers in it. */
     c *= mix(0.78, 1.07, h);
     return c;
 }
@@ -399,13 +408,19 @@ vec3 paperDark() {
 }
 
 /* ---------------- the paper plane ----------------
-   Drawn as maths, not as a sprite: a rotating pixel sprite has to
-   be redrawn for every angle, but a shape made of half-planes
-   turns to any angle for free and still lands on whole cells, so
-   it keeps the pixel look. Signed distance is negative inside. */
-vec2 turn(vec2 p, float a) {
-    float c = cos(a), s = sin(a);
-    return vec2(c * p.x - s * p.y, s * p.x + c * p.y);
+   The shader draws the plane from mathematics, and not from a
+   sprite. A pixel sprite needs a new image for each angle. A
+   shape from half-planes turns to any angle at no cost. It also
+   lands on whole cells, so it keeps the pixel look.
+
+   The signed distance is negative inside the shape. */
+/* Turn a point into the frame of the plane. The angle is the
+   same for each pixel. So the cosine and the sine come in as a
+   uniform. The CPU calls two functions one time. The GPU then
+   calls none for each pixel that the plane can touch. */
+vec2 turn(vec2 p) {
+    return vec2(u_planeRot.x * p.x + u_planeRot.y * p.y,
+                -u_planeRot.y * p.x + u_planeRot.x * p.y);
 }
 float edgeD(vec2 p, vec2 a, vec2 b) {
     vec2 d = b - a;
@@ -415,27 +430,34 @@ float triD(vec2 p, vec2 a, vec2 b, vec2 c) {
     return max(max(edgeD(p, a, b), edgeD(p, b, c)), edgeD(p, c, a));
 }
 
-/* The two wings meet along a line where both half-plane distances
-   are exactly zero, so a strict "< 0" test drops that line and the
-   terrain shows through as a seam down the middle of the plane —
-   reliably, because the camera snaps to whole cells and lines the
-   fold up with a row of them. A hair of slack closes it. */
+/* The two wings meet along a line. On that line both half-plane
+   distances are exactly zero. A test of "< 0" thus drops the
+   line, and the terrain shows through the middle of the plane.
+
+   This occurs often, because the camera moves in whole cells and
+   puts the fold on a row of them. A small value closes the
+   line. */
 const float EPS = 0.0005;
 
-/* Distance to a line SEGMENT, which is what an outline needs.
-   triD is a max of half-planes: exact inside the shape, but wildly
-   short of the truth just past a sharp corner — using it for the
-   outline shoots black spikes off the nose and the wingtips. */
+/* The distance to a line segment. An outline needs this.
+
+   The function triD gives the largest of the half-plane
+   distances. That value is exact inside the shape. Just past a
+   sharp corner it is much too small. An outline from triD thus
+   sends black spikes off the nose and the wing tips. */
 float segD(vec2 p, vec2 a, vec2 b) {
     vec2 pa = p - a, ba = b - a;
     return length(pa - ba * clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0));
 }
 
-/* The shape of the plane, nose along +x, in units of u_planeSize.
-   The out params: "inside" is negative within the silhouette,
-   "edge" is the exact distance to its outline, and "wing" says
-   which of the two folds this pixel belongs to — that split is
-   what draws the crease down the middle for free. */
+/* The shape of the plane. The nose points along +x. The units
+   are u_planeSize.
+
+   The three out values are: "inside", which is negative in the
+   shape; "edge", which is the exact distance to the outline; and
+   "wing", which tells you the fold that holds this pixel. The
+   two folds get different colours, which draws the centre line at
+   no cost. */
 void planeShape(vec2 q, out float inside, out float edge, out float wing) {
     wing = 0.0;
     if (u_planeKind == 5) {                 // Blocky — the old red walker
@@ -465,14 +487,19 @@ void planeShape(vec2 q, out float inside, out float edge, out float wing) {
     float d2 = triD(q, A, C, D);
     wing = d1 <= d2 ? 0.0 : 1.0;
     inside = min(d1, d2);
-    /* A -> B -> C -> D -> A traces the whole silhouette; C is the
-       notch between the wings, so the outline follows it inwards. */
+    /* The path A, B, C, D, A goes round the whole shape. The
+       point C is the notch between the wings, so the outline goes
+       in to it. */
     edge = min(min(segD(q, A, B), segD(q, B, C)), min(segD(q, C, D), segD(q, D, A)));
 }
 
-/* ---------------- landmarks ----------------
-   A landmark always sits on a cone that reaches level LEVELS, so
-   its drawn height is known without looking anything up. */
+/* ---------------- beacons ----------------
+   A beacon always stands on a cone that reaches the top level.
+   Thus the shader knows its drawn height and reads nothing. */
+/* Do not add a box test on d here to leave this function early.
+   We tried that, and it made the frame 3 percent slower. The
+   tests below are cheap selects on a uniform branch, and one more
+   return costs more than they do. */
 bool markPixel(vec3 m, vec2 cell, float me, vec3 under, out vec3 col) {
     col = under;
     if (m.z < 0.0) return false;
@@ -481,8 +508,9 @@ bool markPixel(vec3 m, vec2 cell, float me, vec3 under, out vec3 col) {
     if (ms.x < -80.0 || ms.x > u_res.x + 80.0) return false;
     if (ms.y < -80.0 || ms.y > u_res.y + 40.0) return false;
 
-    /* Undo the lift to find which map row this pixel's terrain came
-       from. A smaller row is nearer the camera and wins. */
+    /* Remove the lift to find the map row of the terrain at
+       this pixel. A smaller row is nearer to the camera, and the
+       nearer row wins. */
     float srcY = cell.y + u_cam.y - me * u_lift;
     if (srcY < m.y - 1.0) return false;
 
@@ -491,9 +519,10 @@ bool markPixel(vec3 m, vec2 cell, float me, vec3 under, out vec3 col) {
     vec3 hot = mix(accentColor(), vec3(1.0), 0.35 * glow);
 
     if (u_markStyle == 1) {                       // Beacon
-        /* Lamp on a slim mast, with a halo that swells and fades.
-           The halo is blended, not painted over, so it reads as
-           light on the snow rather than as a solid ring. */
+        /* A lamp on a thin mast, with a halo that grows and
+           then goes away. The shader mixes the halo with the
+           colour below it. Thus the halo looks like light on the
+           snow, and not like a solid ring. */
         if (abs(d.x) < 2.2 && d.y >= 13.0 && d.y < 18.0) { col = hot; return true; }
         if (abs(d.x) < 3.4 && d.y >= 15.0 && d.y < 16.5) { col = hot; return true; }
         if (abs(d.x) < 1.0 && d.y >= 0.0 && d.y < 14.0) { col = inkColor(); return true; }
@@ -520,7 +549,8 @@ bool markPixel(vec3 m, vec2 cell, float me, vec3 under, out vec3 col) {
     } else if (u_markStyle == 4) {                // Cairn — a stack of stones
         float w = 4.2 - d.y * 0.30;
         if (d.y >= 0.0 && d.y < 13.0 && abs(d.x) < w) {
-            /* Horizontal seams every third cell read as stones. */
+            /* A line at each third cell. The block then looks like a
+               pile of stones. */
             bool seam = mod(d.y, 3.0) < 1.0;
             col = seam ? inkColor() : mix(inkColor(), vec3(0.68), 0.7);
             return true;
@@ -528,7 +558,8 @@ bool markPixel(vec3 m, vec2 cell, float me, vec3 under, out vec3 col) {
         if (d.y >= 13.0 && d.y < 15.5 && abs(d.x) < 1.6) { col = hot; return true; }
     } else {                                      // Flag
         if (abs(d.x) < 0.6 && d.y >= 0.0 && d.y < 15.0) { col = inkColor(); return true; }
-        /* A two-step edge is enough to read as cloth in the wind. */
+        /* An edge with two steps is enough. The flag then looks
+           like cloth in the wind. */
         float wave = d.y > 12.0 ? 6.5 : 5.0;
         if (d.x >= 0.6 && d.x < wave && d.y >= 9.5 && d.y < 15.0) { col = hot; return true; }
     }
@@ -543,23 +574,24 @@ void main() {
     float bel = visibleLayer(cell - vec2(0.0, 1.0));
 
     /* ---- contour ink ----
-       Lines run along the VISIBLE layer, not the flat map, so the
-       ink follows the stacked cutouts and the line under a stack
-       reads as its cliff edge. */
+       The lines follow the layer that you see, and not the flat
+       map. Thus the ink goes round the stack of cut paper. The
+       line below a stack becomes the edge of its cliff. */
     float line = 0.0;
     if (u_inkMode == 1) {
         line = (me != lft || me != bel) ? 1.0 : 0.0;
     } else if (u_inkMode == 2) {
-        /* Index contours, the way a paper topo map does it: every
-           fifth level full strength, the rest held back, so the
-           eye can count height without counting every line. */
+        /* Index contours, as on a paper map. Each fifth level
+           gets a full line. The other levels get a weak line. You
+           can then count the height without a count of every
+           line. */
         if (me != lft || me != bel) {
             float hi = max(me, max(lft, bel));
             line = mod(hi, 5.0) < 0.5 ? 1.0 : 0.34;
         }
     } else if (u_inkMode == 3) {
-        /* Cliffs only: ignore gentle terraces and outline the
-           places where the stack actually steps. */
+        /* Cliffs only. Do not draw a line at a small step. Draw
+           a line only where the stack makes a large step. */
         line = (abs(me - lft) >= 3.0 || abs(me - bel) >= 3.0) ? 1.0 : 0.0;
     }
 
@@ -567,52 +599,57 @@ void main() {
     vec2  srcC  = cell - vec2(0.0, me * u_lift);           // ...in screen cells
     float h     = me / LEVELS;
     bool  water = me <= u_sea + 0.5;
-    /* Baked into the height texture's green channel, in map space,
-       so it stays glued to the terrain while the camera moves. */
+    /* Pass 1 put this in the green channel of the height
+       texture, in map space. Thus the forest stays on the same
+       terrain while the camera moves. */
     float forest = texture2D(u_height, heightUV(srcC)).g;
 
     vec3 fill = paletteFill(h, forest, water);
 
     if (water && u_waterStyle == 1) {
-        /* Flooded valleys are clamped flat, so they carry no
-           contour lines at all and read as dead space. A slow
-           drift of light streaks — sampled much wider than tall,
-           so it comes out as horizontal wash rather than blobs —
-           gives the water something to do without competing with
-           the ink. */
+        /* The shader makes each flooded valley flat. So the
+           water has no contour line, and it looks empty.
+
+           These lines of light move slowly. The noise is much
+           wider than it is tall, so the light makes long
+           horizontal marks and not round spots. The water then
+           has movement, and it does not fight the ink. */
         float ripple = vnoise(vec2(src.x * 0.055, src.y * 0.34) + vec2(u_time * 0.5, 0.0));
         fill = mix(fill, fill * 1.09, step(0.63, ripple));
     } else if (water && u_waterStyle == 2) {
-        /* A fixed two-tone lattice instead: no motion, reads as
-           an old printed sea chart. */
+        /* A pattern of two colours that does not move. The
+           water then looks like an old printed sea chart. */
         fill = mix(fill, fill * 1.13, mod(floor(src.x * 0.5) + floor(src.y * 0.5), 2.0));
     }
 
-    /* ---- relief shading ----
-       Sampled two cells apart on the FLAT height field, not one
-       cell apart on the visible layer: a one-cell difference of an
-       integer level field is almost always 0 or 1, which comes out
-       blotchy, and the visible layer carries the stacking jumps
-       that would read as light on a cliff that is not there. */
+    /* ---- relief shade ----
+       The shader reads the flat height field at two cells to each
+       side. It does not read the layer at one cell.
+
+       A one-cell difference of a whole-number field is almost
+       always 0 or 1. That gives a rough result. The layer also
+       holds the steps of the stack. Those steps would put light
+       on a cliff that is not there. */
     if (u_light == 1) {
         vec2 g = vec2(levelAt(srcC + vec2(2.0, 0.0)) - levelAt(srcC - vec2(2.0, 0.0)),
                       levelAt(srcC + vec2(0.0, 2.0)) - levelAt(srcC - vec2(0.0, 2.0))) / 4.0;
-        /* Light from the north west. A slope that rises to the east
-           presents its face to the west, so it catches the light. */
+        /* The light comes from the north west. A slope that
+           rises to the east turns its face to the west. That face
+           gets the light. */
         float lambert = clamp(0.5 + 1.15 * (0.707 * g.x - 0.707 * g.y), 0.0, 1.0);
         fill *= mix(0.70, 1.26, lambert);
     } else if (u_light == 2) {
-        /* Rim: a bright band just inside every west-facing riser,
-           set two cells back so it sits beside the contour line
-           rather than under it. */
+        /* Rim. A bright band goes inside each step that faces
+           west. It starts two cells back, so it is next to the
+           contour line and not below it. */
         if (me > visibleLayer(cell - vec2(2.0, 0.0))) fill = mix(fill, vec3(1.0), 0.22);
         if (me < visibleLayer(cell + vec2(2.0, 0.0))) fill *= 0.86;
     }
 
     if (u_clouds > 0.5) {
-        /* Cloud shadows drift across the map. Quantised into four
-           steps so they stay pixel art rather than turning into an
-           airbrushed gradient. */
+        /* Cloud shadows move slowly across the map. The shader
+           cuts them into four steps. They then stay pixel art,
+           and they do not become a smooth gradient. */
         float cl = vnoise(src * 0.0075 + vec2(u_time * 0.013, u_time * 0.005) + 130.0);
         fill *= mix(1.0, 0.79, floor(smoothstep(0.55, 0.72, cl) * 3.0) / 3.0);
     }
@@ -628,73 +665,79 @@ void main() {
     if (markPixel(u_m1, cell, me, color, mc)) color = mc;
     if (markPixel(u_m2, cell, me, color, mc)) color = mc;
 
-    /* ---- the plane, its shadow and its vapour trail ----
-       Ground position lifted by the terrain gives the shadow;
-       lifted by terrain + hover gives the plane. The gap between
-       them is what reads as altitude, and it shrinks by itself
-       when the plane crosses a peak. */
-    vec2  ps    = u_plane.xy - u_cam;
-    float pl    = levelAt(ps);
-    vec2  pFoot = ps + vec2(0.0, pl * u_lift);
-    vec2  pBody = ps + vec2(0.0, (pl + u_hover) * u_lift);
-    float wing;
+    /* ---- the plane, its shadow and its trail ----
+       All three are in a narrow column above the map position of
+       the plane. The lift moves an item up the screen only.
 
-    /* The trail never reaches more than about sixty cells behind
-       the plane, or a hundred above and below it once the lift is
-       counted. Everything outside that box can skip twenty texture
-       fetches, which is most of the screen. */
-    if (u_trailMode > 0 && abs(cell.x - pBody.x) < 80.0 && abs(cell.y - pBody.y) < 110.0) {
-        for (int i = 0; i < 10; i++) {
-            vec3 t = u_trail[i];
-            if (t.z <= 0.0) continue;
-            vec2 tp = (t.xy - u_cam) + vec2(0.0, (levelAt(t.xy - u_cam) + u_hover) * u_lift);
-            if (u_trailMode == 1) {
-                if (distance(cell + 0.5, tp) < 0.4 + 1.3 * t.z) {
-                    color = mix(color, paperLight(), 0.30 * t.z);
-                }
-            } else if (i < 9) {
-                /* Ribbon: join each point to the next one instead
-                   of drawing them as beads. */
-                vec3 n = u_trail[i + 1];
-                if (n.z > 0.0) {
-                    vec2 np = (n.xy - u_cam) + vec2(0.0, (levelAt(n.xy - u_cam) + u_hover) * u_lift);
-                    if (segD(cell + 0.5, tp, np) < 0.4 + 1.1 * t.z) {
-                        color = mix(color, paperLight(), 0.34 * t.z);
+       A pixel outside that column stops here. It reads no height,
+       it reads no trail point, and it does no shape mathematics.
+       That is more than 90 percent of the screen. */
+    float dxPlane = abs(cell.x - (u_plane.x - u_cam.x));
+    bool nearTrail = u_trailMode > 0 && dxPlane < 80.0;
+    bool nearPlane = dxPlane < 13.0;
+
+    if (nearTrail || nearPlane) {
+        vec2  ps    = u_plane.xy - u_cam;
+        float pl    = levelAt(ps);
+        /* Lift the ground position by the terrain to get the
+           shadow. Lift it by the terrain and the hover to get the
+           plane. The gap between the two shows the height above
+           the ground. The gap closes at a summit. */
+        vec2  pFoot = ps + vec2(0.0, pl * u_lift);
+        vec2  pBody = ps + vec2(0.0, (pl + u_hover) * u_lift);
+        float wing, shape, edge;
+
+        if (nearTrail && abs(cell.y - pBody.y) < 110.0) {
+            for (int i = 0; i < 10; i++) {
+                vec3 t = u_trail[i];
+                if (t.z <= 0.0) continue;
+                vec2 tp = (t.xy - u_cam) + vec2(0.0, (levelAt(t.xy - u_cam) + u_hover) * u_lift);
+                if (u_trailMode == 1) {
+                    if (distance(cell + 0.5, tp) < 0.4 + 1.3 * t.z) {
+                        color = mix(color, paperLight(), 0.30 * t.z);
+                    }
+                } else if (i < 9) {
+                    /* A ribbon joins each point to the next one.
+                       It does not draw a set of separate dots. */
+                    vec3 n = u_trail[i + 1];
+                    if (n.z > 0.0) {
+                        vec2 np = (n.xy - u_cam) + vec2(0.0, (levelAt(n.xy - u_cam) + u_hover) * u_lift);
+                        if (segD(cell + 0.5, tp, np) < 0.4 + 1.1 * t.z) {
+                            color = mix(color, paperLight(), 0.34 * t.z);
+                        }
                     }
                 }
             }
         }
-    }
 
-    if (u_shadowOn > 0.5) {
-        vec2 q = turn(cell - pFoot, -u_plane.z);
-        q.y *= 2.3;                                  // squashed onto the ground
-        float sIn, sEdge;
-        planeShape(q / u_planeSize, sIn, sEdge, wing);
-        if (sIn < EPS) color *= 0.60;
-    }
+        if (nearPlane) {
+            if (u_shadowOn > 0.5 && abs(cell.y - pFoot.y) < 13.0) {
+                vec2 q = turn(cell - pFoot);
+                q.y *= 2.3;                          // squashed onto the ground
+                planeShape(q / u_planeSize, shape, edge, wing);
+                if (shape < EPS) color *= 0.60;
+            }
 
-    if (u_planeOn > 0.5) {
-        bool hidden = false;
-        if (u_occlude > 0.5) {
-            hidden = (cell.y + u_cam.y - me * u_lift) < u_plane.y - 1.0;
-        }
-        if (!hidden) {
-            vec2 q = turn(cell - pBody, -u_plane.z) / u_planeSize;
-            /* Banking foreshortens the wings. Dividing the local y
-               by cos(bank) makes the tested shape narrower, which
-               is the same thing seen from the front. The floor
-               stops a hard turn from squashing it to a line. */
-            q.y /= max(0.34, cos(u_bank));
-            float pIn, pEdge;
-            planeShape(q, pIn, pEdge, wing);
-            if (pIn < EPS) {
-                /* Blocky keeps the old walker's red, so switching
-                   to it is unmistakable. */
-                color = u_planeKind == 5 ? vec3(0.85, 0.16, 0.10)
-                                         : (wing < 0.5 ? paperLight() : paperDark());
-            } else if (pEdge < 0.17) {
-                color = inkColor();
+            if (u_planeOn > 0.5 && abs(cell.y - pBody.y) < 13.0) {
+                bool hidden = u_occlude > 0.5 &&
+                              (cell.y + u_cam.y - me * u_lift) < u_plane.y - 1.0;
+                if (!hidden) {
+                    vec2 q = turn(cell - pBody) / u_planeSize;
+                    /* A roll makes the wings look shorter. A
+                       larger local y makes the tested shape more
+                       narrow. That is the same wing from the
+                       front. */
+                    q.y *= u_bankScale;
+                    planeShape(q, shape, edge, wing);
+                    if (shape < EPS) {
+                        /* Blocky keeps the red of the old walker.
+                           Thus a change to it is clear. */
+                        color = u_planeKind == 5 ? vec3(0.85, 0.16, 0.10)
+                                                 : (wing < 0.5 ? paperLight() : paperDark());
+                    } else if (edge < 0.17) {
+                        color = inkColor();
+                    }
+                }
             }
         }
     }
