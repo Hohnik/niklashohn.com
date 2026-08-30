@@ -648,6 +648,171 @@ async function main() {
         orbiting + ' vs ' + flying);
   await ctx.close();
 
+  // ------------------------------------------------------ 13
+  section(13, 'a hostile world: bad storage, bad data, bad keys');
+
+  /* A browser in private mode, or one that blocks the storage of
+     a site, makes each read of localStorage throw. The page must
+     fly, and a setting must still change for this visit. */
+  ({ ctx, page } = await open(browser));
+  await page.addInitScript(() => {
+    const die = () => { throw new DOMException('denied', 'SecurityError'); };
+    Object.defineProperty(window, 'localStorage', { get: die, configurable: true });
+  });
+  await page.goto(BASE, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(1500);
+  check('storage denied: the page still draws',
+        await page.evaluate(() => NH.World.cells.w > 0));
+  check('storage denied: a setting still changes',
+        await page.evaluate(() => {
+          try { NH.cfg.set('palette', 2); return !!NH.cfg.label('palette'); }
+          catch (e) { return false; }
+        }));
+  check('storage denied: no errors', page.errors.length === 0, page.errors.join(' | '));
+  await ctx.close();
+
+  /* Text that is not JSON, and numbers that are outside the list
+     of options. Both can come from an older version of the page. */
+  for (const bad of ['{"palette":"zzz",',
+                     JSON.stringify({ palette: 999, pixel: -3, terrain: 'nope', clouds: 'yes' })]) {
+    ({ ctx, page } = await open(browser));
+    await page.addInitScript(v => localStorage.setItem('nh.dev.v3', v), bad);
+    await page.goto(BASE, { waitUntil: 'networkidle' });
+    await page.waitForTimeout(1200);
+    const st = await page.evaluate(() => ({
+      cells: NH.World.cells.w, pal: NH.cfg.label('palette'), px: NH.cfg.v.pixel
+    }));
+    check('bad saved settings fall back to a good value',
+          st.cells > 0 && !!st.pal && st.px > 0 && page.errors.length === 0,
+          JSON.stringify(st) + ' ' + page.errors.join(' | '));
+    await ctx.close();
+  }
+
+  /* The API is not ours. A name, a description, a topic, a
+     language and an address all go into the page. Each one here
+     holds an attack. */
+  ({ ctx, page } = await open(browser, { noStub: true }));
+  await page.route('**://api.github.com/**', route => route.fulfill({
+    status: 200, contentType: 'application/json',
+    body: JSON.stringify([
+      { name: '<img src=x onerror=window.__xss=1>',
+        description: '"><script>window.__xss=1</script>',
+        language: 'constructor', stargazers_count: 3,
+        html_url: 'javascript:window.__xss=1',
+        pushed_at: '2026-01-01', topics: ['<b>bold</b>'], fork: false, archived: false },
+      { name: 'ok-repo', description: null, language: 'Python', stargazers_count: 1,
+        html_url: 'https://github.com/Hohnik/ok-repo', pushed_at: '2026-01-02',
+        topics: [], fork: false, archived: false }
+    ])
+  }));
+  await page.goto(BASE + '#projects', { waitUntil: 'networkidle' });
+  await page.waitForTimeout(2500);
+  const evil = await page.evaluate(() => ({
+    xss: !!window.__xss,
+    hrefs: Array.prototype.map.call(document.querySelectorAll('#proj-list [href]'),
+                                    a => a.getAttribute('href')),
+    spans: document.querySelectorAll('#proj-list span.proj').length,
+    styles: Array.prototype.map.call(document.querySelectorAll('#proj-list .dot'),
+                                     d => d.getAttribute('style')),
+    tags: document.querySelectorAll('#proj-list img, #proj-list b').length
+  }));
+  check('a hostile payload runs no script', evil.xss === false);
+  check('a hostile payload makes no element of its own', evil.tags === 0, String(evil.tags));
+  check('a javascript: address becomes a span, not a link', evil.spans === 1, String(evil.spans));
+  check('each link is http or https', evil.hrefs.every(h => /^https?:/.test(h)),
+        evil.hrefs.join(','));
+  check('a language named after a built-in gives a plain colour',
+        evil.styles.every(v => /^background:#[0-9a-f]{3,8}$/i.test(v.replace(/\s/g, ''))),
+        evil.styles.join(' | '));
+  await ctx.close();
+
+  /* An address that a person can type or paste. */
+  ({ ctx, page } = await open(browser));
+  for (const tail of ['#nowhere', '?look=' + 'z'.repeat(40), '?look=', '?look=%%%']) {
+    await page.goto(BASE + tail, { waitUntil: 'networkidle' });
+    await page.waitForTimeout(900);
+    check('a bad address still gives a map: ' + (tail || '(none)'),
+          await page.evaluate(() => NH.World.cells.w > 0) && page.errors.length === 0,
+          page.errors.join(' | '));
+    page.errors.length = 0;
+  }
+  await ctx.close();
+
+  section('13b', 'the keyboard alone');
+  ({ ctx, page } = await open(browser));
+  await page.goto(BASE + '#projects', { waitUntil: 'networkidle' });
+  await page.waitForTimeout(2000);
+  const focusSeen = [];
+  let ringed = 0;
+  for (let i = 0; i < 22; i++) {
+    await page.keyboard.press('Tab');
+    const info = await page.evaluate(() => {
+      const a = document.activeElement;
+      if (!a || a === document.body) return null;
+      const cs = getComputedStyle(a);
+      return { id: a.id || a.className || (a.textContent || '').trim().slice(0, 14),
+               ring: (cs.outlineStyle !== 'none' && parseFloat(cs.outlineWidth) > 0) ||
+                     cs.boxShadow !== 'none' };
+    });
+    if (!info) continue;
+    focusSeen.push(info.id);
+    if (info.ring) ringed++;
+  }
+  check('the tab key reaches the controls of the sheet', focusSeen.length >= 10,
+        focusSeen.length + ' stops');
+  check('each stop shows a focus ring', ringed === focusSeen.length,
+        ringed + ' of ' + focusSeen.length);
+
+  /* The help card covers the page. If the tab key can leave it,
+     the focus goes to a control that you cannot see. */
+  await page.evaluate(() => document.querySelector('[data-help-toggle]').focus());
+  const opener = await page.evaluate(() => document.activeElement.className);
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(300);
+  check('the help card takes the focus',
+        await page.evaluate(() => {
+          const h = document.getElementById('help');
+          return !h.hidden && h.contains(document.activeElement);
+        }));
+  let escaped = false;
+  for (let i = 0; i < 12; i++) {
+    await page.keyboard.press('Tab');
+    const inside = await page.evaluate(() =>
+      document.getElementById('help').contains(document.activeElement));
+    if (!inside) { escaped = true; break; }
+  }
+  check('the focus stays in the help card', !escaped);
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(300);
+  check('the focus goes back to the button that opened the card',
+        await page.evaluate(() => document.activeElement.className) === opener);
+  check('no errors from the keyboard alone', page.errors.length === 0, page.errors.join(' | '));
+  await ctx.close();
+
+  section('13c', 'fast input');
+  ({ ctx, page } = await open(browser));
+  await page.goto(BASE, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(1000);
+  await page.evaluate(() => {
+    for (let i = 0; i < 40; i++) {
+      NH.Flight.flyTo(['home', 'about', 'projects'][i % 3]);
+      NH.Flight.depart('spam');
+    }
+    NH.Flight.flyTo('about');
+  });
+  let landed;
+  try {
+    await page.waitForFunction(() => NH.UI.openId === 'about', null, { timeout: 25000 });
+    landed = 'about';
+  } catch (e) { landed = await page.evaluate(() => NH.UI.openId); }
+  check('forty fast requests end at the last one', landed === 'about', String(landed));
+  await page.evaluate(() => { for (let i = 0; i < 60; i++) NH.cfg.randomise(); NH.cfg.reset(); });
+  await page.waitForTimeout(900);
+  check('sixty looks in a row still leave a map',
+        await page.evaluate(() => NH.World.cells.w > 0));
+  check('no errors from fast input', page.errors.length === 0, page.errors.join(' | '));
+  await ctx.close();
+
   await browser.close();
   if (server) server.close();
   if (!KEEP) await rm(SHOTS, { recursive: true, force: true });

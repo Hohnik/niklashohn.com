@@ -93,6 +93,30 @@ NH.UI = (function () {
     }
   }
 
+  /* The help card is a dialog and it covers the page. But the tab
+     key went to the page below it. The focus was then on a
+     control that you cannot see.
+
+     So keep the focus in the card while it is open. */
+  const FOCUSABLE = 'a[href], button, input, select, textarea, [tabindex]:not([tabindex="-1"])';
+
+  function trapTab(e) {
+    if (e.key !== 'Tab' || help.hidden) return;
+    const items = Array.prototype.filter.call(
+      help.querySelectorAll(FOCUSABLE), function (el) { return el.offsetParent !== null; });
+    if (!items.length) return;
+    const first = items[0], last = items[items.length - 1];
+    /* The focus can also be outside the card, if a click put it
+       there. Bring it back to the first control. */
+    if (!help.contains(document.activeElement)) {
+      e.preventDefault();
+      first.focus();
+      return;
+    }
+    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+  }
+
   /* ---------------- per-frame ---------------- */
 
   function frame(dt) {
@@ -189,6 +213,7 @@ NH.UI = (function () {
       else if (openId) NH.Flight.depart('hash');
     });
 
+    window.addEventListener('keydown', trapTab);
     window.addEventListener('keydown', onKey);
     window.addEventListener('pointerdown', function (e) {
       if (e.target && e.target.id === 'world') dropHint();
