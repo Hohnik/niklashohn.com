@@ -6,9 +6,10 @@
   "license": "MIT",
   "scripts": {
     "start": "node tools/serve.mjs",
-    "test": "node tools/ste-check.mjs && node tools/verify.mjs",
+    "test": "node tools/ste-check.mjs && node tools/verify.mjs && node tools/contrast.mjs",
     "test:browser": "node tools/verify.mjs",
     "test:keep": "node tools/verify.mjs --keep",
+    "test:contrast": "node tools/contrast.mjs",
     "lint:ste": "node tools/ste-check.mjs",
     "og": "node tools/og.mjs"
   },

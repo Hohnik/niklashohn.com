@@ -36,5 +36,23 @@ export function startServer(port = 8743, root = process.cwd()) {
       res.end('Read error');
     }
   });
-  return new Promise(ok => server.listen(port, '127.0.0.1', () => ok(server)));
+  /* Try the port that the caller asks for. If a different program
+     holds it, take any free port. The caller then reads the real
+     port from server.address().port.
+
+     Before this, a busy port stopped the full test run with an
+     error from deep in the network code. */
+  return new Promise((ok, fail) => {
+    server.once('error', err => {
+      if (err.code !== 'EADDRINUSE') return fail(err);
+      server.once('error', fail);
+      server.listen(0, '127.0.0.1', () => ok(server));
+    });
+    server.listen(port, '127.0.0.1', () => ok(server));
+  });
+}
+
+/* The address of a server that listens on a host and a port. */
+export function origin(server) {
+  return 'http://127.0.0.1:' + server.address().port;
 }

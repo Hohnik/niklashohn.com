@@ -116,6 +116,16 @@ NH.Projects = (function () {
   }
 
   const esc = NH.util.escapeHtml;
+  const safeUrl = NH.util.safeUrl;
+
+  /* Read the colour with hasOwnProperty. A repository with the
+     language "toString" can otherwise find a function on
+     Object.prototype. That text then goes into the style
+     attribute. */
+  function langColour(lang) {
+    return (lang && Object.prototype.hasOwnProperty.call(NH.LANG_COLORS, lang))
+      ? NH.LANG_COLORS[lang] : '#8b8b8b';
+  }
 
   function renderList() {
     const box = document.getElementById('proj-list');
@@ -126,14 +136,20 @@ NH.Projects = (function () {
       return;
     }
     box.innerHTML = list.map(function (p) {
-      const colour = NH.LANG_COLORS[p.lang] || '#8b8b8b';
+      const colour = langColour(p.lang);
       const meta = [];
       if (p.lang) {
         meta.push('<span class="dot" style="background:' + colour + '"></span>' + esc(p.lang));
       }
       if (p.updated) meta.push(esc(p.updated));
       if (p.archived) meta.push('archived');
-      return '<a class="proj" href="' + esc(p.url) + '" target="_blank" rel="noopener">' +
+      const href = safeUrl(p.url);
+      /* A row with no address that the browser can open becomes a
+         span, so that a click does nothing. */
+      const open = href ? '<a class="proj" href="' + esc(href) + '" target="_blank" rel="noopener">'
+                        : '<span class="proj">';
+      const close = href ? '</a>' : '</span>';
+      return open +
         '<span class="proj-top"><span class="proj-name">' + esc(p.name) + '</span>' +
         (p.stars ? '<span class="proj-star">&#9733; ' + p.stars + '</span>' : '') +
         '</span>' +
@@ -144,7 +160,7 @@ NH.Projects = (function () {
               return '<span>' + esc(t) + '</span>';
             }).join('') + '</span>'
           : '') +
-        '</a>';
+        close;
     }).join('');
   }
 

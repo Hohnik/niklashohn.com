@@ -23,6 +23,20 @@ NH.util = {
     return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el.isContentEditable;
   },
 
+  /* Give back the address only if the browser can open it as a
+     page. To escape the HTML is not enough here: a "javascript:"
+     address holds no character that the escape function changes,
+     and it then runs when a person clicks the link. The list of
+     projects comes from the network, so it gets this test. */
+  safeUrl: function (s) {
+    try {
+      const u = new URL(String(s), location.href);
+      return (u.protocol === 'http:' || u.protocol === 'https:') ? u.href : '';
+    } catch (e) {
+      return '';
+    }
+  },
+
   escapeHtml: function (s) {
     return String(s).replace(/[&<>"]/g, function (c) {
       return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];

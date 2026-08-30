@@ -13,6 +13,12 @@ window.NH = window.NH || {};
     NH.World.invalidate();
   };
 
+  /* Read a shared look before anything else reads a setting. The
+     renderer reads the cell size and the lift when it starts, so a
+     link that changes one of them must arrive first. */
+  const look = new URLSearchParams(location.search).get('look');
+  if (look) NH.cfg.decode(look);
+
   if (!NH.World.init(canvas)) {
     /* With no map there is nothing to fly. So the page becomes
        three sheets, one after the other, and you scroll them.
@@ -37,13 +43,6 @@ window.NH = window.NH || {};
     NH.Projects.refresh();
     return;
   }
-
-  /* A ?look= link opens the page with the settings of a different
-     person. This code runs after the browser reads its own stored
-     settings, so the link wins. The site uses the link only when
-     it decodes correctly against the registry. */
-  const look = new URLSearchParams(location.search).get('look');
-  if (look) NH.cfg.decode(look);
 
   /* The save of the canvas must occur in the same task as the
      draw. The browser does not keep the draw buffer, so the pixels

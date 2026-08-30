@@ -3,5 +3,8 @@
 import { startServer } from './static-server.mjs';
 
 const port = Number(process.env.PORT || 8743);
-await startServer(port);
-console.log('http://localhost:' + port);
+const server = await startServer(port);
+/* Show the port that the server holds, and not the port that this
+   tool asked for. The two are different if the first port is
+   busy. */
+console.log('http://localhost:' + server.address().port);

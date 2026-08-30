@@ -205,10 +205,28 @@ NH.Hud = (function () {
 
   /* ---------------- radar ---------------- */
 
+  /* Give the radar as many pixels as the screen has. Without this
+     the canvas holds 150 by 150 pixels, the browser makes it larger
+     for a screen with more density, and every line looks soft. The
+     CSS size can also change with the width of the window, so test
+     it on each frame. It is two number comparisons. */
+  function sizeRadar() {
+    const dpr = Math.min(window.devicePixelRatio || 1, 3);
+    const css = radar.clientWidth || 150;
+    const want = Math.round(css * dpr);
+    if (radar.width === want && radar.height === want) return css;
+    radar.width = want;
+    radar.height = want;
+    radarCtx = radar.getContext('2d');
+    radarCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    return css;
+  }
+
   function updateRadar() {
     if (!radarCtx) radarCtx = radar.getContext('2d');
+    const size = sizeRadar();
     const ctx = radarCtx;
-    const size = radar.width, r = size / 2 - 6, cx = size / 2, cy = size / 2;
+    const r = size / 2 - 6, cx = size / 2, cy = size / 2;
     const p = NH.Flight.state.pos;
     const scale = r / RADAR_RANGE;
 

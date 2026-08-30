@@ -173,7 +173,11 @@ for (const file of walk(process.cwd())) {
 
     for (const raw of prose.match(/\b[A-Za-z]+\b/g) || []) {
       const word = raw.toLowerCase();
-      if (NOT_APPROVED[word]) {
+      /* Read the map with hasOwnProperty. The word "constructor"
+         or "toString" would otherwise find a function on
+         Object.prototype, and the tool would report a word that
+         is approved. */
+      if (Object.prototype.hasOwnProperty.call(NOT_APPROVED, word)) {
         report(file, c.line, 'word', `"${word}" is not approved. Use "${NOT_APPROVED[word]}".`);
       }
       /* A word with a capital letter is a technical name, and

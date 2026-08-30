@@ -20,7 +20,7 @@
 import { chromium } from 'playwright';
 import { mkdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
-import { startServer } from './static-server.mjs';
+import { startServer, origin } from './static-server.mjs';
 
 const PORT = Number(process.env.PORT || 8743);
 const SHOTS = join(process.cwd(), '.verify-shots');
@@ -34,7 +34,9 @@ function check(name, cond, detail) {
 }
 function section(n, title) { console.log('\n[' + n + '] ' + title); }
 
-const BASE = process.env.BASE || `http://127.0.0.1:${PORT}/index.html`;
+/* The server can move to a different port if the first one is
+   busy. So BASE is not known before the server listens. */
+let BASE = process.env.BASE || '';
 
 /* This list keeps the GitHub path the same on each run, and it
    needs no network. It holds two real repositories, one fork and
@@ -115,6 +117,7 @@ async function main() {
   await rm(SHOTS, { recursive: true, force: true });
   await mkdir(SHOTS, { recursive: true });
   const server = process.env.BASE ? null : await startServer(PORT);
+  if (server) BASE = origin(server) + '/index.html';
 
   const browser = await chromium.launch({
     executablePath: process.env.CHROME_PATH || undefined,
@@ -366,8 +369,12 @@ async function main() {
   ({ ctx, page } = await open(browser));
   await page.goto(BASE, { waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(500);
+  /* Pixel and lift are in this set on purpose. They change the
+     size of the offscreen height texture, and thus the renderer
+     must read them before it starts. A look that holds only
+     colours cannot show that fault. */
   const shareCode = await page.evaluate(() => {
-    NH.cfg.apply({ palette: 4, terrain: 1, marker: 3, panel: 2 });
+    NH.cfg.apply({ palette: 4, terrain: 1, marker: 3, panel: 2, pixel: 3, lift: 2 });
     return NH.cfg.encode();
   });
   /* Reset first, so the reload proves the link did the work and
@@ -377,11 +384,21 @@ async function main() {
   await page.waitForTimeout(1800);
   const shared = await page.evaluate(() => ({
     palette: NH.cfg.label('palette'), terrain: NH.cfg.label('terrain'),
-    marker: NH.cfg.label('marker'), panel: NH.cfg.label('panel')
+    marker: NH.cfg.label('marker'), panel: NH.cfg.label('panel'),
+    pixel: NH.cfg.v.pixel, lift: NH.cfg.v.lift,
+    cellW: NH.World.cells.w, wantW: Math.ceil(window.innerWidth / NH.cfg.v.pixel)
   }));
   check('shared link restores the look',
         shared.palette === 'Neon' && shared.terrain === 'Ridged' &&
         shared.marker === 'Ring' && shared.panel === 'Terminal', JSON.stringify(shared));
+  check('shared link restores a size setting', shared.pixel === 8 && shared.lift === 3,
+        'pixel ' + shared.pixel + ', lift ' + shared.lift);
+  /* The renderer must use the shared cell size for the build. To
+     hold the value is not enough. A link that arrives after
+     the build gives the correct number here and a wrong picture. */
+  check('the renderer is built at the shared cell size',
+        Math.abs(shared.cellW - shared.wantW) <= 1,
+        shared.cellW + ' cells wide, want about ' + shared.wantW);
   check('no errors opening a shared link', page.errors.length === 0, page.errors.join(' | '));
   await ctx.close();
 
