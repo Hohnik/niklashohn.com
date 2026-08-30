@@ -217,10 +217,11 @@ scripts/ui.js       Sheets, help, addresses and keys
 scripts/devbar.js   The settings panel
 scripts/main.js     The start-up steps and the frame loop
 tools/verify.mjs    The browser tests
+tools/contrast.mjs  The check for the text contrast
 tools/ste-check.mjs The check for ASD-STE100
 tools/og.mjs        Makes og.png from the live page
 tools/serve.mjs     `npm start`
-tools/static-server.mjs   The one server that all three tools use
+tools/static-server.mjs   The one server that all four tools use
 ```
 
 The site is static files. It has no build step and no dependency. Open
@@ -238,30 +239,47 @@ the other. You can read all the content without the graphics.
 
 ```
 npm install
-npm test              # The language check, then the browser tests
+npm test              # The language check, the browser tests, the contrast
 npm run lint:ste      # The language check only
 npm run test:browser  # The browser tests only
 npm run test:keep     # The browser tests, and keep the screenshots
+npm run test:contrast # The contrast check only
 npm start             # Serve this directory on port 8743
 npm run og            # Make og.png again from the live page
 ```
 
 `tools/verify.mjs` serves the directory. It then drives a headless
-Chromium through 99 checks. The checks include these:
+Chromium through 142 checks. The checks include these:
 
 - The world draws.
 - A flight to a beacon opens the correct sheet and changes the address.
+- The autopilot lands on the beacon that you ask for, at four screen
+  sizes. A flight can go near a beacon that you did not ask for.
 - Text in the project filter does not turn the plane.
 - Every option of every setting compiles, draws, and draws something
   different from its neighbours.
 - The layout stays correct at four screen sizes with the dev bar open.
 - The browser keeps the settings after a reload.
-- A shared look link gives that look. A damaged link does nothing.
+- A shared look link gives that look, and the renderer uses the cell
+  size in that link for the build. A damaged link does nothing.
 - The page without WebGL and the page with less motion both show the
   content.
 - The site does not draw the terrain passes again after the camera
   stops.
 - The page draws again after it loses the GPU and gets it back.
+- The page starts with storage that throws on each read, and with
+  saved settings that are not correct.
+- A hostile answer from the GitHub API puts no element and no script
+  in the page, and makes no link that is not http or https.
+- The tab key reaches each control, each stop shows a focus ring, and
+  the help card keeps the focus while it is open.
+- Forty flight requests in one tick end at the last one.
+
+`tools/contrast.mjs` measures the text against its background on all
+four sheet skins and all three sheets. The limits are the limits of
+WCAG AA: 4.5 to 1 for normal text, and 3 to 1 for large text. The tool
+puts each clear background on the one below it, and it keeps the worst
+of the elements that a selector finds.
 
 The tests run after every push. Refer to `.github/workflows/verify.yml`.
 The workflow keeps the screenshots when a test fails.

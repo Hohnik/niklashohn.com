@@ -286,12 +286,14 @@ body.hud-compass .hint { bottom: calc(var(--gap) + 5.9rem); }
   line-height: 1.6;
   animation: sheet-in .28s cubic-bezier(.2, .8, .3, 1);
 }
-/* The sheet scrolls, and a browser that hides the scroll bar
-   until you move it gives no sign of that. A thin bar that stays
-   shows a person that there is more text below. The grey works on
-   each of the four skins, so no skin needs its own colour. */
-.panel { scrollbar-width: thin; scrollbar-color: rgba(127, 127, 127, .55) transparent; }
-.panel::-webkit-scrollbar { width: 8px; }
+/* The sheet scrolls. These rules give its scroll bar a colour
+   that works on all four skins, so no skin needs its own.
+
+   Do not add scrollbar-width here. A browser that reads that
+   property then ignores these rules. Note that a browser which
+   puts the scroll bar on top of the content, and hides it after a
+   moment, keeps that behaviour. These rules cannot change it. */
+.panel::-webkit-scrollbar { width: 10px; }
 .panel::-webkit-scrollbar-track { background: transparent; }
 .panel::-webkit-scrollbar-thumb {
   background: rgba(127, 127, 127, .5);
