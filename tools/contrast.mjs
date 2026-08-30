@@ -44,6 +44,11 @@ const browser = await chromium.launch({
 const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
 const page = await ctx.newPage();
 await page.route('**://api.github.com/**', r => r.abort());
+/* Do not count a test run as a visit. An empty script keeps the
+   console clean. */
+await page.route('**://gc.zgo.at/**', r => r.fulfill({
+  status: 200, contentType: 'text/javascript', body: ''
+}));
 
 const problems = [];
 const skipped = [];

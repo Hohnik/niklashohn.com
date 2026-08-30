@@ -249,7 +249,7 @@ npm run og            # Make og.png again from the live page
 ```
 
 `tools/verify.mjs` serves the directory. It then drives a headless
-Chromium through 142 checks. The checks include these:
+Chromium through 145 checks. The checks include these:
 
 - The world draws.
 - A flight to a beacon opens the correct sheet and changes the address.
@@ -274,6 +274,8 @@ Chromium through 142 checks. The checks include these:
 - The tab key reaches each control, each stop shows a focus ring, and
   the help card keeps the focus while it is open.
 - Forty flight requests in one tick end at the last one.
+- The tag that counts a visit is in the page, it has a full https
+  address, and it does not hold up the first frame.
 
 `tools/contrast.mjs` measures the text against its background on all
 four sheet skins and all three sheets. The limits are the limits of

@@ -23,6 +23,10 @@ const ctx = await browser.newContext({ viewport: { width: 1200, height: 630 } })
 const page = await ctx.newPage();
 page.on('pageerror', e => console.error('page error:', e.message));
 await page.route('**://api.github.com/**', r => r.abort());
+/* Do not count a run of this tool as a visit. */
+await page.route('**://gc.zgo.at/**', r => r.fulfill({
+  status: 200, contentType: 'text/javascript', body: ''
+}));
 await page.goto(`${BASE}/index.html`, { waitUntil: 'domcontentloaded' });
 await page.waitForTimeout(1600);
 

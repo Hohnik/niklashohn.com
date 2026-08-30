@@ -81,9 +81,19 @@ async function open(browser, opts = {}) {
        because the page went to a different address. The tests go
        to a different address on purpose. So a font that was still
        on its way is not a failure. */
-    if (r.url().includes('api.github.com') || why.includes('ERR_ABORTED')) return;
+    if (r.url().includes('api.github.com') || r.url().includes('gc.zgo.at') ||
+        why.includes('ERR_ABORTED')) return;
     errors.push('requestfailed: ' + r.url() + ' ' + why);
   });
+  /* Do not count a test run as a visit. The tests open the page
+     many times, and each one would go into the real numbers.
+
+     Give an empty script, and do not stop the request. To stop it
+     puts "Failed to load resource" in the console. The test for a
+     clean console cannot tell that message from a real one. */
+  await page.route('**://gc.zgo.at/**', route => route.fulfill({
+    status: 200, contentType: 'text/javascript', body: ''
+  }));
   if (!noStub) {
     await page.route('**://api.github.com/**', route => route.fulfill({
       status: 200, contentType: 'application/json', body: JSON.stringify(GITHUB_STUB)
@@ -154,6 +164,22 @@ async function main() {
   check('canvas sized in cells', fp.w > 100 && fp.w < 500, fp.w + ' cells wide');
   check('fallback notice hidden', await page.locator('#glfail').isHidden());
   await shot(page, '01-boot');
+
+  /* The count of the visits is one tag with no code of our own.
+     It is easy to lose in an edit of the page, and nobody sees
+     that it is gone. */
+  const gc = await page.evaluate(() => {
+    const el = document.querySelector('script[data-goatcounter]');
+    if (!el) return null;
+    return { count: el.dataset.goatcounter, src: el.getAttribute('src'), async: el.async };
+  });
+  check('the page counts a visit', !!gc && /goatcounter\.com\/count$/.test(gc.count),
+        JSON.stringify(gc));
+  /* An address that starts with two slashes looks for the file on
+     the disk from a file:// address. */
+  check('the count script has a full https address',
+        !!gc && /^https:\/\//.test(gc.src), gc ? gc.src : 'no tag');
+  check('the count script does not hold up the first frame', !!gc && gc.async === true);
 
   // ------------------------------------------------------- 2
   section(2, 'the opening flight arrives at Start');
