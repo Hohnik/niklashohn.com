@@ -508,6 +508,31 @@ async function main() {
     await ctx.close();
   }
 
+  section('10c', 'the autopilot reaches the beacon that you ask for');
+  /* The path from one beacon to a second beacon can go near a
+     third one. The size of the window moves the start of the
+     plane, so a fault of this kind shows only at some sizes. Thus
+     the check uses four sizes and all three beacons. */
+  for (const [w, h] of [[1440, 900], [900, 500], [390, 844], [320, 568]]) {
+    ({ ctx, page } = await open(browser, { viewport: { width: w, height: h } }));
+    await page.goto(BASE, { waitUntil: 'networkidle' });
+    await page.waitForTimeout(1000);
+    for (const id of ['projects', 'about', 'home']) {
+      let got = null;
+      await page.evaluate(i => NH.Flight.flyTo(i), id);
+      try {
+        await page.waitForFunction(i => NH.UI.openId === i, id, { timeout: 25000 });
+        got = id;
+      } catch (e) {
+        got = await page.evaluate(() => NH.UI.openId);
+      }
+      check(`${w}x${h}: fly to ${id} opens ${id}`, got === id, 'opened ' + got);
+      await page.evaluate(() => NH.Flight.depart('test'));
+      await page.waitForTimeout(200);
+    }
+    await ctx.close();
+  }
+
   section('10b', 'touch devices get touch advice');
   ({ ctx, page } = await open(browser, {
     viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true

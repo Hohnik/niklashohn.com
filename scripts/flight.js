@@ -292,6 +292,11 @@ NH.Flight = (function () {
           if (dist > NH.DEPART) delete state.suppress[m.id];
           continue;
         }
+        /* While the autopilot flies to a beacon, only that beacon
+           can catch the plane. The path from one beacon to a
+           second beacon can go near a third one. Before this, a
+           request for Projects could stop at Home. */
+        if (state.auto && m.id !== state.auto) continue;
         if (dist < NH.ARRIVE) { arrive(m); break; }
       }
     }

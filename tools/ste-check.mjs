@@ -54,7 +54,11 @@ const ING_OK = new Set([
   'string', 'strings', 'during', 'ring', 'rings', 'thing', 'things',
   'setting', 'settings', 'bring', 'nothing', 'something', 'anything',
   'everything', 'according', 'sampling', 'wing', 'wings',
-  'bearing', 'bearings', 'heading', 'headings'
+  'bearing', 'bearings', 'heading', 'headings',
+  /* Technical names. ASD-STE100 permits a technical name in the
+     form that the equipment uses. These are the names of CSS
+     properties and of parts of a page. */
+  'padding', 'spacing', 'sizing', 'clipping'
 ]);
 
 const CONTRACTION = /\b\w+'(s|t|re|ve|ll|d|m)\b/gi;

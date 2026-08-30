@@ -286,6 +286,21 @@ body.hud-compass .hint { bottom: calc(var(--gap) + 5.9rem); }
   line-height: 1.6;
   animation: sheet-in .28s cubic-bezier(.2, .8, .3, 1);
 }
+/* The sheet scrolls, and a browser that hides the scroll bar
+   until you move it gives no sign of that. A thin bar that stays
+   shows a person that there is more text below. The grey works on
+   each of the four skins, so no skin needs its own colour. */
+.panel { scrollbar-width: thin; scrollbar-color: rgba(127, 127, 127, .55) transparent; }
+.panel::-webkit-scrollbar { width: 8px; }
+.panel::-webkit-scrollbar-track { background: transparent; }
+.panel::-webkit-scrollbar-thumb {
+  background: rgba(127, 127, 127, .5);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+.panel::-webkit-scrollbar-thumb:hover { background: rgba(127, 127, 127, .8); background-clip: content-box; }
+
 @keyframes sheet-in {
   from { opacity: 0; transform: translate(-50%, calc(-50% + 14px)); }
 }
@@ -305,6 +320,20 @@ body.hud-compass .hint { bottom: calc(var(--gap) + 5.9rem); }
     border-radius: 1rem 1rem 0 0;
   }
   @keyframes sheet-in { from { opacity: 0; transform: translateY(18px); } }
+
+  /* On a phone the sheet fills the lower part of the screen and
+     the quick nav is on top of it. A bar that you can see through
+     lets the words of the sheet come through it. So the bar
+     becomes solid while a sheet is open. */
+  body.sheet-open .quicknav { background: rgba(18, 18, 21, .95); }
+
+  /* The hint was one line that you cannot break. On a narrow
+     screen the end of the line went past the edge. */
+  .hint {
+    white-space: normal; text-align: center; line-height: 1.5;
+    max-width: calc(100vw - 2 * var(--gap));
+  }
+
 }
 
 /* With the dev bar open, the sheet must fit below it. The bar
@@ -528,6 +557,7 @@ body.panel-blueprint .chips span { border-color: #3f7fb8; }
   border: 1px solid var(--glass-line);
   backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
 }
+
 .devchip:hover { color: #fff; }
 body.dev-on .devchip { color: #16150f; background: #f4f1e6; border-color: transparent; }
 
@@ -697,19 +727,36 @@ body.dev-on .devchip { color: #16150f; background: #f4f1e6; border-color: transp
     top: auto;
     max-height: calc(100vh - var(--devbar-h, 0px) - 5rem);
   }
-  /* The quick nav needs the full width at the bottom. So the dev
-     button moves up. It must not go above the GitHub link. */
-  .devchip { bottom: calc(var(--gap) + 3.6rem); }
-  .quicknav { width: calc(100vw - 2 * var(--gap)); justify-content: space-around; }
+  /* The quick nav needs the full width at the bottom. The dev
+     button then has no space at the bottom of a narrow screen:
+     it was on top of the hint, and on top of the sheet. The top
+     left corner is free, so it goes there. */
+  .devchip { top: var(--gap); bottom: auto; left: var(--gap); right: auto; }
+  /* On a phone the quick nav is a bar at the edge, and not a
+     pill that floats. A pill leaves a thin band of the sheet
+     below it, and the words in that band look broken. */
+  .quicknav {
+    left: 0; right: 0; bottom: 0; width: 100%;
+    transform: none;
+    border-radius: 0; border-left: 0; border-right: 0; border-bottom: 0;
+    justify-content: space-around;
+    padding: .3rem .25rem calc(.3rem + env(safe-area-inset-bottom, 0px));
+  }
   .quicknav button, .quicknav a { padding: .42rem .5rem; }
 }
 
 /* Keep the two bars clear of the home indicator. */
 @supports (padding: env(safe-area-inset-bottom)) {
-  .quicknav { bottom: calc(var(--gap) + env(safe-area-inset-bottom)); }
+  /* The bar on a phone is at the edge and holds this space in
+     its own padding. So only the wide screen moves up here. */
+  @media (min-width: 40.01rem) {
+    .quicknav { bottom: calc(var(--gap) + env(safe-area-inset-bottom)); }
+  }
   .devchip { bottom: calc(var(--gap) + env(safe-area-inset-bottom)); }
+  /* On a narrow screen the dev button is at the top, so the
+     space at the bottom of the screen does not apply to it. */
   @media (max-width: 40rem) {
-    .devchip { bottom: calc(var(--gap) + 3.6rem + env(safe-area-inset-bottom)); }
+    .devchip { top: var(--gap); bottom: auto; }
   }
   .panel { padding-bottom: calc(4.6rem + env(safe-area-inset-bottom)); }
 }
