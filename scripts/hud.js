@@ -34,6 +34,10 @@ NH.Hud = (function () {
     el.className = 'mark-label';
     el.innerHTML = '<b></b><span></span>';
     labelsBox.appendChild(el);
+    /* Keep the two children here. They do not change, and a
+       search for them in the frame loop is work for nothing. */
+    el._name_el = el.querySelector('b');
+    el._sub_el = el.querySelector('span');
     labels[mark.id] = el;
     return el;
   }
@@ -66,8 +70,8 @@ NH.Hud = (function () {
       if (retext || !el._w) {
         const dist = Math.round(Math.hypot(p.x - m.world.x, p.y - m.world.y));
         const sub = dist < NH.ARRIVE ? m.tag : dist + ' cells';
-        if (el._name !== m.name) { el.querySelector('b').textContent = m.name; el._name = m.name; }
-        if (el._sub !== sub) { el.querySelector('span').textContent = sub; el._sub = sub; }
+        if (el._name !== m.name) { el._name_el.textContent = m.name; el._name = m.name; }
+        if (el._sub !== sub) { el._sub_el.textContent = sub; el._sub = sub; }
         el.classList.toggle('near', dist < NH.DEPART);
         el._w = el.offsetWidth;      // one reflow per label, eight times a second
         el._h = el.offsetHeight;
@@ -98,6 +102,12 @@ NH.Hud = (function () {
     el.className = 'arrow';
     el.innerHTML = '<i></i><em></em>';
     arrowsBox.appendChild(el);
+    /* Keep the two children. The frame loop turned the triangle
+       with a search for it, three times in each frame. That is
+       180 searches a second for an element that does not move in
+       the tree. */
+    el._icon = el.querySelector('i');
+    el._text = el.querySelector('em');
     arrows[mark.id] = el;
     return el;
   }
@@ -144,10 +154,15 @@ NH.Hud = (function () {
       el.style.transform = 'translate(-50%, -50%) translate(' +
         Math.round(cx + dx * t) + 'px,' + Math.round(cy + dy * t) + 'px)';
       /* The triangle points up by default; rotate it onto the bearing. */
-      el.querySelector('i').style.transform =
-        'rotate(' + Math.round(Math.atan2(dy, dx) * 180 / Math.PI + 90) + 'deg)';
+      /* The triangle turns in steps of one degree. To write the
+         same style again makes the browser do the work again. */
+      const deg = Math.round(Math.atan2(dy, dx) * 180 / Math.PI + 90);
+      if (el._deg !== deg) {
+        el._icon.style.transform = 'rotate(' + deg + 'deg)';
+        el._deg = deg;
+      }
       if (retextArrows) {
-        el.querySelector('em').textContent =
+        el._text.textContent =
           m.name + ' ' + Math.round(Math.hypot(p.x - m.world.x, p.y - m.world.y));
       }
     });

@@ -355,6 +355,19 @@ async function main() {
   check('a look round-trips', codec.roundTrip && codec.differs);
   check('a malformed look is rejected', codec.rejects);
 
+  /* A button that shows a result puts the result in its own
+     label. Two clicks inside the wait must still give the first
+     label back. */
+  const flashBtn = page.locator('.dev-action', { hasText: 'Copy link' });
+  const flashWas = (await flashBtn.textContent()).trim();
+  await flashBtn.click();
+  await page.waitForTimeout(120);
+  await flashBtn.click();
+  await page.waitForTimeout(2000);
+  check('a button that flashes a result gets its label back',
+        (await flashBtn.textContent()).trim() === flashWas,
+        (await flashBtn.textContent()).trim() + ' vs ' + flashWas);
+
   // the button gives a real file
   const dl = page.waitForEvent('download', { timeout: 8000 }).catch(() => null);
   await page.click('.dev-action >> nth=3');       // Save PNG
@@ -671,9 +684,30 @@ async function main() {
   check('storage denied: no errors', page.errors.length === 0, page.errors.join(' | '));
   await ctx.close();
 
+  /* A key that names a function on Object.prototype must find
+     nothing, and it must not throw. */
+  ({ ctx, page } = await open(browser));
+  await page.goto(BASE, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(1200);
+  const proto = await page.evaluate(() => {
+    const out = [];
+    ['constructor', 'toString', 'hasOwnProperty', '__proto__'].forEach(k => {
+      try {
+        NH.cfg.set(k, 1); NH.cfg.step(k, 1);
+        out.push(k + ':' + NH.cfg.label(k) + '/' + !!NH.cfg.feature(k));
+      } catch (e) { out.push(k + ' THREW ' + e.message); }
+    });
+    return { out: out.join(' '), cells: NH.World.cells.w };
+  });
+  check('a setting named after a built-in finds nothing and does not throw',
+        !/THREW/.test(proto.out) && proto.cells > 0, proto.out);
+  await ctx.close();
+
   /* Text that is not JSON, and numbers that are outside the list
      of options. Both can come from an older version of the page. */
-  for (const bad of ['{"palette":"zzz",',
+  /* "null" is correct JSON and gives null, and a read of a
+     property of null throws. */
+  for (const bad of ['{"palette":"zzz",', 'null', '5', '"text"', '[1,2,3]',
                      JSON.stringify({ palette: 999, pixel: -3, terrain: 'nope', clouds: 'yes' })]) {
     ({ ctx, page } = await open(browser));
     await page.addInitScript(v => localStorage.setItem('nh.dev.v3', v), bad);
@@ -682,7 +716,7 @@ async function main() {
     const st = await page.evaluate(() => ({
       cells: NH.World.cells.w, pal: NH.cfg.label('palette'), px: NH.cfg.v.pixel
     }));
-    check('bad saved settings fall back to a good value',
+    check('bad saved settings fall back to a good value: ' + bad.slice(0, 22),
           st.cells > 0 && !!st.pal && st.px > 0 && page.errors.length === 0,
           JSON.stringify(st) + ' ' + page.errors.join(' | '));
     await ctx.close();

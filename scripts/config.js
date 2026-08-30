@@ -148,7 +148,10 @@ NH.on = function (event, fn) { (listeners[event] = listeners[event] || []).push(
 NH.emit = function (event, arg) { (listeners[event] || []).forEach(function (fn) { fn(arg); }); };
 
 /* ---- current selection ---- */
-const byKey = {};
+/* A map with no prototype. A key such as "constructor" would
+   otherwise find a function on Object.prototype, and the test for
+   an unknown key below would let it through. */
+const byKey = Object.create(null);
 NH.FEATURES.forEach(function (f) { byKey[f.key] = f; });
 
 /* Index of the selected option, per feature. */
@@ -172,6 +175,11 @@ function resolve() {
 function load() {
   let saved;
   try { saved = JSON.parse(localStorage.getItem(STORE_KEY) || '{}'); } catch (e) { saved = {}; }
+  /* The text "null" is correct JSON, and it gives null. A read of
+     a property of null throws, and that stopped the start of the
+     page. A number or a text does no harm, but it holds no
+     setting either. */
+  if (!saved || typeof saved !== 'object') saved = {};
   NH.FEATURES.forEach(function (f) {
     const v = saved[f.key];
     if (v === undefined) return;
@@ -195,6 +203,7 @@ function commit(key) {
 Object.assign(NH.cfg, {
   label: function (key) {
     const f = byKey[key];
+    if (!f) return '';
     return f.type === 'toggle' ? (state[key] ? 'On' : 'Off') : f.options[state[key]].label;
   },
   feature: function (key) { return byKey[key]; },
@@ -210,6 +219,7 @@ Object.assign(NH.cfg, {
 
   step: function (key, dir) {
     const f = byKey[key];
+    if (!f) return;
     if (f.type === 'toggle') NH.cfg.set(key, !state[key]);
     else NH.cfg.set(key, state[key] + (dir || 1));
   },

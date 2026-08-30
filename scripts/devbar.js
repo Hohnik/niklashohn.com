@@ -90,9 +90,14 @@ NH.DevBar = (function () {
   /* Show the result on the button. The bar has no other place for
      a line of status. */
   function flash(btn, text) {
-    const was = btn.textContent;
+    /* Keep the first label on the button, and stop a wait that is
+       not complete. Two clicks in less than the wait would
+       otherwise make the message the new label, and the button
+       would keep it. */
+    if (btn._label === undefined) btn._label = btn.textContent;
+    clearTimeout(btn._flash);
     btn.textContent = text;
-    setTimeout(function () { btn.textContent = was; }, 1400);
+    btn._flash = setTimeout(function () { btn.textContent = btn._label; }, 1400);
   }
 
   function copyLook(btn) {
