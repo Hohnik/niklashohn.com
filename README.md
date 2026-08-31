@@ -193,11 +193,15 @@ against another, and not as a target.
   from 38 ms to 32 ms. Therefore the fixed cost for each draw controls
   this environment, and not the work for each pixel.
 
-Two rules come from these measurements:
+Three rules come from these measurements:
 
 1. Measure a change. Do not assume it.
 2. A test to leave a shader function early is not always faster. One
    such test made the frame 3 percent slower. We took it out again.
+3. Do not make a limit from a number that the machine controls. A
+   limit of 12 frames a second stopped a build at 11, and the next
+   build of the same commit gave 34. The test suite now reports the
+   rate and counts the passes that it did not do.
 
 ## 5 Files
 
@@ -249,7 +253,7 @@ npm run og            # Make og.png again from the live page
 ```
 
 `tools/verify.mjs` serves the directory. It then drives a headless
-Chromium through 145 checks. The checks include these:
+Chromium through 144 checks. The checks include these:
 
 - The world draws.
 - A flight to a beacon opens the correct sheet and changes the address.
@@ -265,7 +269,11 @@ Chromium through 145 checks. The checks include these:
 - The page without WebGL and the page with less motion both show the
   content.
 - The site does not draw the terrain passes again after the camera
-  stops.
+  stops. This is the check for the cost of a frame, because the count
+  is the same on each machine. The rate in frames a second is
+  information only: the tests use a CPU rasteriser on a machine that
+  it shares, and the same commit gave 11 frames a second in one build
+  and 34 in the next.
 - The page draws again after it loses the GPU and gets it back.
 - The page starts with storage that throws on each read, and with
   saved settings that are not correct.
