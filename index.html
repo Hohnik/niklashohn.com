@@ -1,179 +1,214 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="description" content="Niklas Hohn — AI student and developer based near Munich, Germany." />
-  <meta name="theme-color" content="#f4f1e8" />
-  <title>Niklas Hohn — AI & Software</title>
-  <link rel="preconnect" href="https://avatars.githubusercontent.com" />
-  <link rel="stylesheet" href="styles.css" />
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Niklas Hohn — AI student, Moosburg</title>
+<meta name="description" content="Niklas Hohn — AI student in Moosburg, Germany. A portfolio you fly through: steer a paper plane over a shader-generated landscape to reach the About and Projects beacons." />
+<meta name="theme-color" content="#8aa7c4" />
+<meta property="og:title" content="Niklas Hohn" />
+<meta property="og:description" content="Fly a paper plane over a WebGL landscape to navigate the site." />
+<meta property="og:type" content="website" />
+<meta property="og:url" content="https://niklashohn.com/" />
+<!-- tools/og.mjs makes this image from the site. Thus the preview
+     shows the real page. -->
+<meta property="og:image" content="https://niklashohn.com/og.png" />
+<meta property="og:image:width" content="1200" />
+<meta property="og:image:height" content="630" />
+<meta property="og:image:alt" content="A pixel-art contour landscape with a paper plane banking towards a snow-capped beacon." />
+<meta name="twitter:card" content="summary_large_image" />
+<link rel="canonical" href="https://niklashohn.com/" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%235b7f9e'/%3E%3Cpath d='M2 8 L13 3 L9 13 L7.5 8.5 Z' fill='%23fbfaf5'/%3E%3C/svg%3E" />
+<link rel="stylesheet" href="styles.css" />
+
+<!-- The page is a canvas with three sheets behind a flight model.
+     A crawler cannot read that. This block gives the same facts in
+     a form that it can read. -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Person",
+  "name": "Niklas Hohn",
+  "alternateName": "Hohnik",
+  "url": "https://niklashohn.com/",
+  "description": "AI student in Moosburg, Germany.",
+  "address": { "@type": "PostalAddress", "addressLocality": "Moosburg", "addressCountry": "DE" },
+  "sameAs": ["https://github.com/Hohnik"]
+}
+</script>
 </head>
 <body>
-  <div class="noise" aria-hidden="true"></div>
-  <header class="site-header">
-    <a class="brand" href="#top" aria-label="Niklas Hohn, home">
-      <span class="brand-mark" data-text="NH">NH</span>
-      <span>Niklas Hohn</span>
-    </a>
-    <nav aria-label="Primary navigation">
-      <a href="#about">About</a>
-      <a href="#work">Work</a>
-      <a href="#contact">Contact</a>
-    </nav>
-    <a class="header-cta" href="https://github.com/Hohnik" target="_blank" rel="noreferrer">GitHub <span>↗</span></a>
-  </header>
 
-  <main id="top">
-    <section class="hero" aria-labelledby="hero-title">
-      <div class="hero-copy">
-        <p class="eyebrow"><span class="status-dot"></span> AI student · developer · curious human</p>
-        <h1 id="hero-title">I teach machines.<br><em>They teach me back.</em></h1>
-        <p class="lede">Hey, I’m Niklas — an AI student turning ideas into useful software, experiments, and open-source projects.</p>
-        <div class="hero-actions">
-          <a class="button primary" href="#work">Explore my work <span>↓</span></a>
-          <a class="button text-link" href="https://de.linkedin.com/in/niklas-hohn-54804b256" target="_blank" rel="noreferrer">LinkedIn <span>↗</span></a>
-        </div>
-      </div>
+<canvas id="world" aria-hidden="true"></canvas>
 
-      <div class="hero-visual" aria-label="Portrait and code illustration">
-        <div class="orbit orbit-one"></div>
-        <div class="orbit orbit-two"></div>
-        <div class="portrait-frame">
-          <img src="https://avatars.githubusercontent.com/u/26911455?v=4" alt="Niklas Hohn" width="440" height="440" />
-        </div>
-        <div class="floating-card card-code" aria-hidden="true">
-          <span class="card-label">CURRENT MODE</span>
-          <code>model.fit(<b>curiosity</b>)</code>
-        </div>
-        <div class="floating-card card-location">
-          <span class="pin">●</span>
-          <span><small>BASED IN</small>Moosburg, DE</span>
-        </div>
-      </div>
-    </section>
+<!-- Shown instead of the canvas when WebGL is unavailable. The
+     sheets below still work, so the site degrades to a plain
+     scrollable page rather than to nothing. -->
+<div id="glfail" class="glfail" hidden>
+  <p><strong>No WebGL here.</strong> The flying map needs it — everything else still works.</p>
+</div>
 
-    <div class="flow-divider" aria-hidden="true">
-      <svg viewBox="0 0 1440 78" preserveAspectRatio="none">
-        <path class="flow-base" d="M-30 40 C180 40 244 40 390 40 C490 40 515 15 603 15 C696 15 720 63 812 63 C903 63 935 40 1050 40 L1470 40"/>
-        <path class="flow-accent" d="M390 40 C490 40 515 15 603 15 C696 15 720 63 812 63 C903 63 935 40 1050 40"/>
-        <circle cx="603" cy="15" r="4"/><circle cx="812" cy="63" r="4"/>
-      </svg>
+<div id="labels" class="layer" aria-hidden="true"></div>
+
+<div id="hud" class="hud" aria-hidden="true">
+  <canvas id="radar" width="150" height="150"></canvas>
+  <div id="arrows" class="arrows"></div>
+  <div id="compass" class="compass"><div class="compass-strip"></div></div>
+</div>
+
+<div id="fps" class="fps" hidden>—</div>
+
+<p id="hint" class="hint">
+  <span class="k">&#8592;</span><span class="k">&#8594;</span> steer &middot;
+  <span class="k">shift</span> boost &middot; fly to a beacon
+</p>
+
+<!-- A flight to a beacon changes the whole page and makes no sound.
+     This line tells a screen reader what occurred. -->
+<p id="announce" class="visually-hidden" role="status" aria-live="polite"></p>
+
+<main id="panel" class="panel" hidden>
+  <button id="panel-close" class="panel-close" type="button" aria-label="Leave this beacon">&times;</button>
+
+  <!-- ------------------------------------------------ HOME -->
+  <section class="doc" id="doc-home">
+    <p class="eyebrow">Beacon 01 &middot; Start</p>
+    <h1>Niklas&nbsp;Hohn</h1>
+    <p class="lead">AI student. Moosburg, Germany. I build things mostly to find out how they work.</p>
+    <p>You are looking at a landscape that does not exist anywhere — it is a noise function,
+       cut into 28 levels, with every level drawn a little higher than the one below it.
+       The paper plane is how you get around: there is nothing to click.</p>
+    <ul class="keys" data-gl-only>
+      <li><span class="k">&#8592;</span> <span class="k">&#8594;</span> or <span class="k">A</span> <span class="k">D</span> — steer</li>
+      <li><span class="k">shift</span> or <span class="k">W</span> — boost</li>
+      <li><span class="k">1</span> <span class="k">2</span> <span class="k">3</span> — autopilot to a beacon</li>
+      <li><span class="k">esc</span> — peel off</li>
+      <li><span class="k">~</span> — dev mode: swap out every part of this page</li>
+      <li><span class="k">?</span> — the full list of keys</li>
+    </ul>
+    <p class="quiet" data-gl-only>On a phone: hold a finger anywhere and the plane flies to it.
+       Press <span class="k">?</span> any time for this list.</p>
+  </section>
+
+  <!-- ----------------------------------------------- ABOUT -->
+  <section class="doc" id="doc-about">
+    <p class="eyebrow">Beacon 02 &middot; Who</p>
+    <h1>About</h1>
+    <p class="lead">Hi, Niklas here&nbsp;&#9996;&#65039;</p>
+    <p>I&rsquo;m an AI student based in Moosburg, Germany. Almost everything I&rsquo;ve
+       published falls into one of three piles.</p>
+
+    <h2>Learning by rebuilding</h2>
+    <p>A GPT-style transformer, backpropagation, word2vec, n-grams, seq2seq translation,
+       a semantic segmentation model — each written from scratch, because reading the
+       paper and running the library are not the same as having it work in your hands.</p>
+
+    <h2>Tools I actually needed</h2>
+    <p>A room-availability finder and a timetable for HAW Landshut. An email client that
+       behaves like a chat app instead of a filing cabinet. A cheat sheet for the shortcuts
+       I kept forgetting. A scanner for bowling pin sheets.</p>
+
+    <h2>Things that move</h2>
+    <p>The <em>Nature of Code</em> examples ported to pygame, generative shaders, and this map.</p>
+
+    <h2>Toolbox</h2>
+    <p class="chips">
+      <span>Python</span><span>PyTorch</span><span>NumPy</span><span>Pandas</span>
+      <span>JavaScript</span><span>TypeScript</span><span>React</span><span>Svelte</span>
+      <span>GLSL</span><span>Java</span><span>Docker</span><span>Linux</span>
+    </p>
+
+    <h2>How this page works</h2>
+    <p>Three shader passes draw the world, all at <em>cell</em> resolution — the canvas is a
+       quarter the width of the window and CSS scales it back up, so the pixel grid is real
+       rather than rounded.</p>
+    <p>The first pass writes the terrain height of every cell into a texture. The second asks,
+       for each pixel, <em>which layer lands on me?</em> — searching from the top level down,
+       because a fragment shader can colour itself but cannot move itself. The first hit wins,
+       and that is the entire fake perspective. The third does the colour, the contour ink, the
+       relief shading and the plane — which is drawn as two triangles of half-planes rather
+       than a sprite, so it turns to any angle for free.</p>
+    <p>Press <span class="k">~</span> to pull it apart: five terrain generators, seven palettes,
+       four contour styles, three lighting models, six plane shapes — twenty-three settings
+       in all, and the six named presets are just bundles of them.</p>
+
+    <p class="links">
+      <a href="https://github.com/Hohnik" target="_blank" rel="noopener">github.com/Hohnik</a>
+      <a href="mailto:niklaslhohn@gmail.com">niklaslhohn@gmail.com</a>
+    </p>
+  </section>
+
+  <!-- -------------------------------------------- PROJECTS -->
+  <section class="doc" id="doc-projects">
+    <p class="eyebrow">Beacon 03 &middot; What</p>
+    <h1>Projects</h1>
+    <p class="lead">Everything public on GitHub, newest and most-starred first.</p>
+    <div class="proj-tools">
+      <input id="proj-search" type="search" placeholder="filter&hellip;" aria-label="Filter projects" autocomplete="off" />
+      <div id="proj-langs" class="proj-langs" role="group" aria-label="Filter by language"></div>
+      <div id="proj-sort" class="proj-langs proj-sort" role="group" aria-label="Sort by"></div>
     </div>
+    <div id="proj-list" class="proj-list">
+      <p class="quiet">Loading&hellip;</p>
+    </div>
+    <p id="proj-source" class="quiet"></p>
+  </section>
+</main>
 
-    <section class="about section" id="about">
-      <div class="section-heading">
-        <p class="kicker">01 / About</p>
-        <h2>Student.<br>Developer.<br><em>Builder.</em></h2>
-      </div>
-      <div class="about-content">
-        <p class="about-lead">I’m Niklas, an AI student at HAW Landshut. I live in Moosburg and publish my work as <strong class="handle">@Hohnik</strong><span class="honey-sticker" role="img" aria-label="Honey pot — a nod to Hohnik sounding like Honig"><svg viewBox="0 0 52 48" aria-hidden="true"><path class="sticker-cut" d="M12 12h28v8c4 4 6 9 6 15 0 8-7 12-20 12S6 43 6 35c0-6 2-11 6-15z"/><path class="pot-body" d="M12 18h28c3 4 5 9 5 15 0 8-6 12-19 12S7 41 7 33c0-6 2-11 5-15z"/><path class="pot-rim" d="M10 12h32v9H10z"/><path class="honey-drip" d="M11 18h30v6c-4-1-5 5-9 3-4-2-5 4-9 1-4-3-6 1-12-1z"/></svg></span>.</p>
-        <p>Most of my projects start with something I want to understand: a robot arm, a campus timetable, a machine-learning model, or a simulation. I build the smallest useful version, put the code online, and keep learning from it.</p>
-        <dl class="about-facts">
-          <div><dt>Studying</dt><dd>Artificial Intelligence</dd></div>
-          <div><dt>Working with</dt><dd>Python · JavaScript</dd></div>
-          <div><dt>Based in</dt><dd>Moosburg, Germany</dd></div>
-        </dl>
-      </div>
-    </section>
+<nav id="quicknav" class="quicknav" aria-label="Fly to">
+  <button type="button" data-fly="home">Start</button>
+  <button type="button" data-fly="about">About</button>
+  <button type="button" data-fly="projects">Projects</button>
+  <a href="https://github.com/Hohnik" target="_blank" rel="noopener">GitHub</a>
+  <button type="button" class="quicknav-help" data-help-toggle aria-label="Keyboard shortcuts">?</button>
+</nav>
 
-    <section class="work section" id="work">
-      <div class="work-header">
-        <div>
-          <p class="kicker">02 / Selected work</p>
-          <h2>Things I’ve been<br>building lately.</h2>
-        </div>
-        <a class="all-projects" href="https://github.com/Hohnik?tab=repositories" target="_blank" rel="noreferrer">All repositories <span>↗</span></a>
-      </div>
+<!-- Keyboard reference. Opened with ? or the chip in the quick nav. -->
+<div id="help" class="help" hidden>
+  <div class="help-card" role="dialog" aria-modal="true" aria-label="Controls">
+    <h2>Controls</h2>
+    <dl>
+      <dt><span class="k">&#8592;</span> <span class="k">&#8594;</span> <span class="k">A</span> <span class="k">D</span></dt><dd>steer</dd>
+      <dt><span class="k">shift</span> <span class="k">W</span></dt><dd>boost</dd>
+      <dt><span class="k">1</span> <span class="k">2</span> <span class="k">3</span></dt><dd>autopilot to Start / About / Projects</dd>
+      <dt><span class="k">H</span></dt><dd>fly home</dd>
+      <dt><span class="k">esc</span></dt><dd>peel off, close the sheet</dd>
+      <dt><span class="k">~</span></dt><dd>dev mode &mdash; swap out every part of this page</dd>
+      <dt><span class="k">?</span></dt><dd>this list</dd>
+      <dt>touch</dt><dd>hold a finger anywhere and the plane flies to it</dd>
+    </dl>
+    <p class="quiet">In dev mode, click a control to step forward and right-click to step back.</p>
+    <button type="button" class="help-close" data-help-toggle>Close</button>
+  </div>
+</div>
 
-      <div class="project-grid">
-        <a class="project featured" href="https://github.com/Hohnik/noc-examples-pygame" target="_blank" rel="noreferrer">
-          <div class="project-top"><span class="project-number">01</span><span class="project-arrow">↗</span></div>
-          <div class="project-art generative" aria-hidden="true"><canvas id="flow-canvas"></canvas></div>
-          <div class="project-copy">
-            <div><p class="project-type">CREATIVE CODE · PYTHON</p><h3>Nature of Code,<br>reimagined in Pygame</h3></div>
-            <p>A Python and Pygame port of examples from Daniel Shiffman’s “The Nature of Code.”</p>
-          </div>
-        </a>
+<div id="devbar" class="devbar" hidden></div>
+<button id="devchip" class="devchip" type="button" title="Dev mode (~)">dev</button>
 
-        <a class="project" href="https://github.com/Hohnik/Room-Availability-HAW-Landshut" target="_blank" rel="noreferrer">
-          <div class="project-top"><span class="project-number">02</span><span class="project-arrow">↗</span></div>
-          <div class="project-art room-art-v2" aria-hidden="true">
-            <svg class="abstract-campus" viewBox="0 0 620 330">
-              <defs><pattern id="mapdots" width="15" height="15" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1" fill="currentColor"/></pattern></defs>
-              <rect width="620" height="330" fill="url(#mapdots)" opacity=".14"/>
-              <path class="map-road" d="M-20 240 C90 170 170 275 275 205 S460 85 650 135"/>
-              <g class="map-blocks">
-                <path d="M80 70h115v48h-34v60h-45v-60H80z"/><path d="M222 43h78v119h-29v-35h-49z"/>
-                <path d="M348 70h145v55h-52v54h-93z"/><path d="M75 220h176v58h-66v-21H75z"/>
-                <path class="hot" d="M278 190h69v-31h50v89h76v47H278z"/><path d="M510 205h70v72h-70z"/>
-              </g>
-              <path class="map-pointer" d="M385 178 L406 134 L421 181 L406 174 Z"/>
-            </svg>
-          </div>
-          <div class="project-copy compact">
-            <div><p class="project-type">CAMPUS TOOL · JAVASCRIPT</p><h3>Room Availability</h3></div>
-            <p>An interactive campus map for checking a room’s weekly occupancy at HAW Landshut.</p>
-          </div>
-        </a>
+<noscript>
+  <style>#panel,.doc{display:block!important;position:static!important}#world,#hint,#quicknav,#devchip,.hud{display:none}</style>
+</noscript>
 
-        <a class="project" href="https://github.com/Hohnik/LaRobot" target="_blank" rel="noreferrer">
-          <div class="project-top"><span class="project-number">03</span><span class="project-arrow">↗</span></div>
-          <div class="project-art robot-art-v2" aria-hidden="true">
-            <svg class="robot-poster robot-scene-v5" viewBox="0 0 620 330">
-              <defs><pattern id="robotdots" width="16" height="16" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1" fill="currentColor"/></pattern></defs>
-              <rect width="620" height="330" fill="url(#robotdots)" opacity=".12"/>
-              <path class="ground" d="M35 282h550"/>
-              <g class="motion-copy">
-                <path class="copy-base" d="M50 279h142l-18-44H68z"/>
-                <path class="copy-arm" d="M120 237L208 102L342 71"/>
-                <circle cx="120" cy="237" r="31"/><circle cx="208" cy="102" r="23"/><circle cx="342" cy="71" r="16"/>
-              </g>
-              <g class="hero-arm">
-                <path class="arm-base" d="M48 281h148l-20-48H67z"/>
-                <path class="arm-link lower" d="M121 237L232 165"/>
-                <circle class="arm-joint base-joint" cx="121" cy="237" r="34"/>
-                <path class="arm-link upper" d="M232 165L369 130"/>
-                <circle class="arm-joint elbow-joint" cx="232" cy="165" r="25"/>
-                <circle class="arm-joint wrist-joint" cx="369" cy="130" r="17"/>
-                <path class="arm-claw" d="M382 130l38-18m-38 18l41 13"/>
-              </g>
-              <path class="motion-path-v5" d="M343 70C397 74 433 93 440 126"/>
-              <g class="targets">
-                <path d="M457 280v-75h11v-17h26v17h11v75z"/>
-                <path d="M520 280v-55h9v-14h22v14h9v55z"/>
-              </g>
-              <circle class="target-ring" cx="479" cy="188" r="31"/>
-            </svg>
-          </div>
-          <div class="project-copy compact">
-            <div><p class="project-type">ROBOTICS · AI · PYTHON</p><h3>LaRobot</h3></div>
-            <p>An environment for recording and simulating YAM robot arms, then training a policy to imitate their motion.</p>
-          </div>
-        </a>
-      </div>
-    </section>
+<script src="scripts/util.js"></script>
+<script src="scripts/shaders.js"></script>
+<script src="scripts/config.js"></script>
+<script src="scripts/content.js"></script>
+<script src="scripts/world.js"></script>
+<script src="scripts/flight.js"></script>
+<script src="scripts/projects.js"></script>
+<script src="scripts/hud.js"></script>
+<script src="scripts/ui.js"></script>
+<script src="scripts/devbar.js"></script>
+<script src="scripts/main.js"></script>
 
-    <section class="contact section" id="contact">
-      <p class="kicker">03 / Connect</p>
-      <div class="contact-grid">
-        <h2>Have an idea?<br><em>Let’s talk.</em></h2>
-        <div class="contact-copy">
-          <p>I’m always happy to talk about AI, software, open source, or an interesting problem worth solving.</p>
-          <div class="contact-links">
-            <a href="https://de.linkedin.com/in/niklas-hohn-54804b256" target="_blank" rel="noreferrer"><span>LinkedIn</span><b>↗</b></a>
-            <a href="https://github.com/Hohnik" target="_blank" rel="noreferrer"><span>GitHub</span><b>↗</b></a>
-          </div>
-        </div>
-      </div>
-    </section>
-  </main>
+<!-- The count of the visits. The service keeps no personal data and
+     sets no cookie. The script is async, so it does not hold up the
+     first frame, and the page is complete without it.
 
-  <footer>
-    <a class="brand footer-brand" href="#top"><span class="brand-mark" data-text="NH">NH</span><span>Niklas Hohn</span></a>
-    <p>Built with curiosity and a keyboard.</p>
-    <a href="#top">Back to top ↑</a>
-  </footer>
-  <script src="script.js"></script>
+     The address starts with https on purpose. The snippet from the
+     service starts with two slashes. That form looks for the file on
+     the disk from a file:// address. -->
+<script data-goatcounter="https://niklashohn.goatcounter.com/count"
+        async src="https://gc.zgo.at/count.js"></script>
 </body>
 </html>
