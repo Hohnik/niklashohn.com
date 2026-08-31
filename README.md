@@ -333,6 +333,8 @@ them with other words:
 4. Photographs of the landscape near Moosburg.
 5. More [projects](https://100.antfu.me/) for people to look at.
 6. Make the duck larger when it stands on something high.
+7. A background with a dither pattern, in the style of
+   [xtcjs](https://xtcjs.app).
 
 ### 8.1 A vector that draws an image
 
